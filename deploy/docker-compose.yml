@@ -1,0 +1,17 @@
+services:
+  vikunja:
+    image: ghcr.io/${GHCR_OWNER}/vikunja:${VIKUNJA_TAG:-latest}
+    container_name: vikunja
+    restart: unless-stopped
+    ports:
+      - "${VIKUNJA_PORT:-3456}:3456"
+    environment:
+      VIKUNJA_DATABASE_TYPE: sqlite
+      VIKUNJA_DATABASE_PATH: /db/vikunja.db
+      VIKUNJA_FILES_BASEPATH: /app/vikunja/files
+      VIKUNJA_SERVICE_PUBLICURL: ${VIKUNJA_PUBLIC_URL}
+      VIKUNJA_SERVICE_SECRET: ${VIKUNJA_SERVICE_SECRET}
+    volumes:
+      - ./data/db:/db
+      - ./data/files:/app/vikunja/files
+

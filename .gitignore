@@ -15,7 +15,7 @@ Run
 dist/
 cover.*
 /vikunja
-Test_*
+/Test_*
 bin/
 secrets
 *.deb
@@ -53,5 +53,6 @@ devenv.local.nix
 /.claude/settings.local.json
 PLAN.md
 plans/
+deploy/.env
 /.crush/
 /.playwright-mcp

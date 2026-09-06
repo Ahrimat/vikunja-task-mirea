@@ -1,0 +1,118 @@
+name: University CI/CD
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+concurrency:
+  group: university-production
+  cancel-in-progress: false
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+
+      - name: Compile Mage
+        uses: magefile/mage-action@a662bd8c29d8106879588cfff83b2faf6e6f59db # v4.0.0
+        with:
+          version: latest
+          args: -compile ./mage-static
+
+      - name: Set up frontend
+        uses: ./.github/actions/setup-frontend
+
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build
+
+      - name: Build backend
+        run: |
+          chmod +x ./mage-static
+          ./mage-static build
+
+      - name: Run backend feature tests
+        run: ./mage-static test:feature
+
+      - name: Run backend web tests
+        run: ./mage-static test:web
+
+      - name: Run frontend unit tests
+        working-directory: frontend
+        run: pnpm test:unit
+
+  docker:
+    name: Build and publish Docker image
+    if: github.event_name == 'push'
+    needs:
+      - test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Set lowercase image name
+        shell: bash
+        run: echo "IMAGE_NAME=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/vikunja" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push image
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          build-args: |
+            RELEASE_VERSION=${{ github.sha }}
+          tags: |
+            ${{ env.IMAGE_NAME }}:latest
+            ${{ env.IMAGE_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    name: Deploy to VPS
+    if: github.event_name == 'push'
+    needs:
+      - docker
+    runs-on: ubuntu-latest
+    steps:
+      - name: Pull and restart Vikunja
+        uses: appleboy/ssh-action@0ff4204d59e8e51228ff73bce53f80d53301dee2 # v1.2.5
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -eu
+            cd /opt/vikunja/deploy
+            docker compose pull
+            docker compose up -d
+            docker image prune -f
