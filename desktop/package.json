@@ -1,0 +1,71 @@
+{
+  "name": "vikunja-desktop",
+  "version": "v0.1.0",
+  "description": "Vikunja's frontend as a standalone desktop application.",
+  "main": "main.js",
+  "repository": "https://code.vikunja.io/desktop",
+  "license": "GPL-3.0-or-later",
+  "packageManager": "pnpm@11.25.0",
+  "author": {
+    "email": "maintainers@vikunja.io",
+    "name": "Vikunja Team"
+  },
+  "homepage": "https://vikunja.io",
+  "scripts": {
+    "build:frontend": "cd ../frontend && pnpm run build && cd ../desktop && rm -rf frontend && cp -r ../frontend/dist frontend",
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder --publish never"
+  },
+  "build": {
+    "appId": "io.vikunja.desktop",
+    "files": [
+      "**/*",
+      "preload-quick-entry.js"
+    ],
+    "productName": "Vikunja Desktop",
+    "artifactName": "${productName}-${version}.${ext}",
+    "icon": "build/icon.icns",
+    "protocols": {
+      "name": "Vikunja Desktop",
+      "schemes": ["vikunja-desktop"]
+    },
+    "linux": {
+      "target": [
+        "deb",
+        "AppImage",
+        "snap",
+        "pacman",
+        "apk",
+        "freebsd",
+        "rpm",
+        "zip",
+        "tar.gz"
+      ],
+      "category": "Productivity"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable",
+        "msi",
+        "zip"
+      ]
+    },
+    "mac": {
+      "category": "public.app-category.productivity",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "43.5.1",
+    "electron-builder": "26.15.3",
+    "unzipper": "0.12.5"
+  },
+  "dependencies": {
+    "express": "5.2.1"
+  }
+}

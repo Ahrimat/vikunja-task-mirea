@@ -1,0 +1,169 @@
+<template>
+	<Multiselect
+		v-model="labels"
+		:loading="loading"
+		:placeholder="$t('task.label.placeholder')"
+		:multiple="true"
+		:search-results="foundLabels"
+		label="title"
+		:creatable="creatable"
+		:creation-disabled-message="creationDisabledMessage"
+		:create-placeholder="$t('task.label.createPlaceholder')"
+		:search-delay="10"
+		:close-after-select="false"
+		:disabled="disabled"
+		@search="findLabel"
+		@select="addLabel"
+		@create="createAndAddLabel"
+	>
+		<template #tag="{item: label}">
+			<span
+				:style="getLabelStyles(label)"
+				class="tag"
+			>
+				<span>{{ label.title }}</span>
+				<BaseButton
+					v-if="!disabled"
+					v-cy="'taskDetail.removeLabel'"
+					:aria-label="$t('task.label.removeLabel', {label: label.title})"
+					class="delete is-small"
+					@click="removeLabel(label)"
+				/>
+			</span>
+		</template>
+		<template #searchResult="{option}">
+			<span
+				v-if="typeof option === 'string'"
+				class="tag search-result"
+			>
+				<span>{{ option }}</span>
+			</span>
+			<span
+				v-else
+				:style="getLabelStyles(option)"
+				class="tag search-result"
+			>
+				<span>{{ option.title }}</span>
+			</span>
+		</template>
+	</Multiselect>
+</template>
+
+<script setup lang="ts">
+import {ref, computed, watch} from 'vue'
+import {useI18n} from 'vue-i18n'
+
+import {success} from '@/message'
+
+import BaseButton from '@/components/base/BaseButton.vue'
+import Multiselect from '@/components/input/Multiselect.vue'
+import type {Label} from '@/client/generated'
+import {useCreateLabelMutation} from '@/client/queries/labels'
+import {useTaskStore} from '@/stores/tasks'
+import {getRandomColorHex} from '@/helpers/color/randomColor'
+import {useLabelStyles} from '@/composables/useLabelStyles'
+import {useLabels} from '@/composables/useLabels'
+
+const props = withDefaults(defineProps<{
+	modelValue: Label[] | undefined
+	taskId?: number
+	disabled?: boolean
+	creatable?: boolean
+	creationDisabledMessage?: string
+}>(), {
+	taskId: 0,
+	disabled: false,
+	creatable: true,
+	creationDisabledMessage: '',
+})
+
+const emit = defineEmits<{
+	'update:modelValue': [labels: Label[]],
+}>()
+
+const {t} = useI18n({useScope: 'global'})
+
+const labels = ref<Label[]>([])
+const query = ref('')
+
+watch(
+	() => props.modelValue,
+	(value) => {
+		labels.value = Array.from(new Map((value ?? []).map(label => [label.id, label])).values())
+	},
+	{
+		immediate: true,
+		deep: true,
+	},
+)
+
+const taskStore = useTaskStore()
+const {filterLabelsByQuery, isPending} = useLabels()
+const createLabelMutation = useCreateLabelMutation()
+const {getLabelStyles} = useLabelStyles()
+
+const foundLabels = computed(() => filterLabelsByQuery(labels.value, query.value))
+const loading = computed(() => isPending.value || createLabelMutation.isPending.value || taskStore.isLoading)
+
+function findLabel(newQuery: string) {
+	query.value = newQuery
+}
+
+async function addLabel(label: Label, showNotification = true) {
+	if (props.taskId === 0) {
+		emit('update:modelValue', labels.value)
+		return
+	}
+
+	await taskStore.addLabel({label, taskId: props.taskId})
+	emit('update:modelValue', labels.value)
+	if (showNotification) {
+		success({message: t('task.label.addSuccess')})
+	}
+}
+
+async function removeLabel(label: Label) {
+	if (props.taskId !== 0) {
+		await taskStore.removeLabel({label, taskId: props.taskId})
+	}
+
+	const idx = labels.value.findIndex(l => l.id === label.id)
+	if (idx !== -1) {
+		labels.value.splice(idx, 1)
+	}
+	emit('update:modelValue', labels.value)
+	success({message: t('task.label.removeSuccess')})
+}
+
+async function createAndAddLabel(title: string) {
+	if (props.taskId === 0) {
+		return
+	}
+
+	const newLabel = await createLabelMutation.mutateAsync({
+		title,
+		hex_color: getRandomColorHex(),
+	})
+	await addLabel(newLabel, false)
+	labels.value.push(newLabel)
+	success({message: t('task.label.addCreateSuccess')})
+}
+</script>
+
+<style lang="scss" scoped>
+.tag {
+	margin: .25rem !important;
+}
+
+.tag.search-result {
+	margin: 0 !important;
+}
+
+:deep(.input-wrapper) {
+	padding: .25rem !important;
+}
+
+:deep(input.input) {
+	padding: 0 .5rem;
+}
+</style>

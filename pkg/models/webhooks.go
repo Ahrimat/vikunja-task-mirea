@@ -1,0 +1,392 @@
+// Vikunja is a to-do list application to facilitate your life.
+// Copyright 2018-present Vikunja and contributors. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+package models
+
+import (
+	"bytes"
+	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"sort"
+	"strings"
+	"sync"
+	"time"
+
+	"code.vikunja.io/api/pkg/config"
+	"code.vikunja.io/api/pkg/events"
+	"code.vikunja.io/api/pkg/log"
+	"code.vikunja.io/api/pkg/user"
+	"code.vikunja.io/api/pkg/utils"
+	"code.vikunja.io/api/pkg/version"
+	"code.vikunja.io/api/pkg/web"
+
+	"xorm.io/builder"
+	"xorm.io/xorm"
+)
+
+var webhookClient *http.Client
+
+// The webhook target is user-configured, so its error body is untrusted and can be arbitrarily large.
+const maxWebhookErrorBodySize = 4096
+
+type Webhook struct {
+	// The generated ID of this webhook target
+	ID int64 `xorm:"bigint autoincr not null unique pk" json:"id" param:"webhook" readOnly:"true" doc:"The generated ID of this webhook target."`
+	// The target URL where the POST request with the webhook payload will be made
+	TargetURL string `xorm:"not null" valid:"required,url" json:"target_url" doc:"The target URL where the POST request with the webhook payload will be made."`
+	// The webhook events which should fire this webhook target
+	Events []string `xorm:"JSON not null" valid:"required" json:"events" doc:"The webhook events which should fire this webhook target. Get the available events from /api/v1/webhooks/events."`
+	// The project ID of the project this webhook target belongs to
+	ProjectID int64 `xorm:"bigint null index" json:"project_id" param:"project" readOnly:"true" doc:"The id of the project this webhook target belongs to. Set from the URL, not the body."`
+	// The user ID if this is a user-level webhook (mutually exclusive with ProjectID)
+	UserID int64 `xorm:"bigint null index" json:"user_id" readOnly:"true" doc:"The id of the user if this is a user-level webhook (mutually exclusive with project_id)."`
+	// If provided, webhook requests will be signed using HMAC. Check out the docs about how to use this: https://vikunja.io/docs/webhooks/#signing
+	Secret string `xorm:"null" json:"secret" writeOnly:"true" doc:"If provided, webhook requests will be signed using HMAC. See https://vikunja.io/docs/webhooks/#signing. Write-only: never returned in responses."`
+	// If provided, webhook requests will be sent with a Basic Auth header.
+	BasicAuthUser     string `xorm:"null" json:"basic_auth_user" writeOnly:"true" doc:"If provided together with basic_auth_password, webhook requests will be sent with a Basic Auth header. Write-only: never returned in responses."`
+	BasicAuthPassword string `xorm:"null" json:"basic_auth_password" writeOnly:"true" doc:"The password for the Basic Auth header. Write-only: never returned in responses."`
+
+	// The user who initially created the webhook target.
+	CreatedBy   *user.User `xorm:"-" json:"created_by" valid:"-" readOnly:"true" doc:"The user who initially created the webhook target."`
+	CreatedByID int64      `xorm:"bigint not null" json:"-"`
+
+	// A timestamp when this webhook target was created. You cannot change this value.
+	Created time.Time `xorm:"created not null" json:"created" readOnly:"true" doc:"A timestamp when this webhook target was created. You cannot change this value."`
+	// A timestamp when this webhook target was last updated. You cannot change this value.
+	Updated time.Time `xorm:"updated not null" json:"updated" readOnly:"true" doc:"A timestamp when this webhook target was last updated. You cannot change this value."`
+
+	web.CRUDable    `xorm:"-" json:"-"`
+	web.Permissions `xorm:"-" json:"-"`
+}
+
+func (w *Webhook) TableName() string {
+	return "webhooks"
+}
+
+// maskCredentials clears the write-only secret and basic-auth fields so they are
+// never echoed back in a response. The client already submitted these values and
+// the DB row keeps them (outgoing deliveries reload and sign from the DB copy);
+// only the in-memory struct returned to the caller is cleared. Always call this
+// after the DB write, never before.
+func (w *Webhook) maskCredentials() {
+	w.Secret = ""
+	w.BasicAuthUser = ""
+	w.BasicAuthPassword = ""
+}
+
+var availableWebhookEvents map[string]bool
+var availableWebhookEventsLock *sync.Mutex
+var userDirectedWebhookEvents map[string]bool
+
+func init() {
+	availableWebhookEvents = make(map[string]bool)
+	availableWebhookEventsLock = &sync.Mutex{}
+	userDirectedWebhookEvents = make(map[string]bool)
+}
+
+func RegisterEventForWebhook(event events.Event) {
+	availableWebhookEventsLock.Lock()
+	defer availableWebhookEventsLock.Unlock()
+
+	availableWebhookEvents[event.Name()] = true
+	events.RegisterListener(event.Name(), &WebhookListener{
+		EventName: event.Name(),
+	})
+}
+
+func GetAvailableWebhookEvents() []string {
+	evts := []string{}
+	for e := range availableWebhookEvents {
+		evts = append(evts, e)
+	}
+
+	sort.Strings(evts)
+
+	return evts
+}
+
+// RegisterUserDirectedEventForWebhook registers an event as both a webhook event and a user-directed event
+func RegisterUserDirectedEventForWebhook(event events.Event) {
+	RegisterEventForWebhook(event)
+	availableWebhookEventsLock.Lock()
+	defer availableWebhookEventsLock.Unlock()
+	userDirectedWebhookEvents[event.Name()] = true
+}
+
+// IsUserDirectedEvent returns whether an event name is user-directed
+func IsUserDirectedEvent(eventName string) bool {
+	availableWebhookEventsLock.Lock()
+	defer availableWebhookEventsLock.Unlock()
+	return userDirectedWebhookEvents[eventName]
+}
+
+// GetUserDirectedWebhookEvents returns a sorted list of user-directed webhook event names
+func GetUserDirectedWebhookEvents() []string {
+	availableWebhookEventsLock.Lock()
+	defer availableWebhookEventsLock.Unlock()
+
+	evts := []string{}
+	for e := range userDirectedWebhookEvents {
+		evts = append(evts, e)
+	}
+	sort.Strings(evts)
+	return evts
+}
+
+// Create creates a webhook target
+// @Summary Create a webhook target
+// @Description Create a webhook target which receives POST requests about specified events from a project.
+// @tags webhooks
+// @Accept json
+// @Produce json
+// @Security JWTKeyAuth
+// @Param id path int true "Project ID"
+// @Param webhook body models.Webhook true "The webhook target object with required fields"
+// @Success 201 {object} models.Webhook "The created webhook target."
+// @Failure 400 {object} web.HTTPError "Invalid webhook object provided."
+// @Failure 500 {object} models.Message "Internal error"
+// @Router /projects/{id}/webhooks [put]
+func (w *Webhook) Create(s *xorm.Session, a web.Auth) (err error) {
+
+	// Validate that exactly one of ProjectID or UserID is set
+	if w.ProjectID == 0 && w.UserID == 0 {
+		return InvalidFieldError([]string{"project_id", "user_id"})
+	}
+	if w.ProjectID != 0 && w.UserID != 0 {
+		return InvalidFieldError([]string{"project_id", "user_id"})
+	}
+
+	if !strings.HasPrefix(w.TargetURL, "http") {
+		return InvalidFieldError([]string{"target_url"})
+	}
+
+	for _, event := range w.Events {
+		if _, has := availableWebhookEvents[event]; !has {
+			return InvalidFieldError([]string{"events"})
+		}
+		// User-level webhooks can only subscribe to user-directed events
+		if w.UserID != 0 && !IsUserDirectedEvent(event) {
+			return InvalidFieldError([]string{"events"})
+		}
+	}
+
+	w.CreatedByID = a.GetID()
+	w.ID = 0
+	_, err = s.Insert(w)
+	if err != nil {
+		return err
+	}
+
+	w.CreatedBy, err = user.GetUserByID(s, a.GetID())
+	if err != nil {
+		return err
+	}
+
+	w.maskCredentials()
+	return
+}
+
+// ReadAll returns all webhook targets for a project
+// @Summary Get all api webhook targets for the specified project
+// @Description Get all api webhook targets for the specified project.
+// @tags webhooks
+// @Accept json
+// @Produce json
+// @Security JWTKeyAuth
+// @Param page query int false "The page number. Used for pagination. If not provided, the first page of results is returned."
+// @Param per_page query int false "The maximum number of items per bucket per page. This parameter is limited by the configured maximum of items per page."
+// @Param id path int true "Project ID"
+// @Success 200 {array} models.Webhook "The list of all webhook targets"
+// @Failure 500 {object} models.Message "Internal server error"
+// @Router /projects/{id}/webhooks [get]
+func (w *Webhook) ReadAll(s *xorm.Session, a web.Auth, _ string, page int, perPage int) (result interface{}, resultCount int, numberOfTotalItems int64, err error) {
+	// A link share can read its project, but webhook target_urls are secrets.
+	if _, is := a.(*LinkSharing); is {
+		return nil, 0, 0, ErrGenericForbidden{}
+	}
+
+	// w.UserID set selects the user-level list: a user may only see their own
+	// webhooks. The project list (w.UserID == 0) delegates to the project's read
+	// permission instead.
+	var listCond builder.Cond
+	if w.UserID > 0 {
+		if w.UserID != a.GetID() {
+			return nil, 0, 0, ErrGenericForbidden{}
+		}
+		listCond = builder.Eq{"user_id": w.UserID}
+	} else {
+		p := &Project{ID: w.ProjectID}
+		can, _, cerr := p.CanRead(s, a)
+		if cerr != nil {
+			return nil, 0, 0, cerr
+		}
+		if !can {
+			return nil, 0, 0, ErrGenericForbidden{}
+		}
+		listCond = builder.Eq{"project_id": w.ProjectID}
+	}
+
+	ws := []*Webhook{}
+	err = s.Where(listCond).
+		Limit(getLimitFromPageIndex(page, perPage)).
+		Find(&ws)
+	if err != nil {
+		return
+	}
+
+	total, err := s.Where(listCond).
+		Count(&Webhook{})
+	if err != nil {
+		return
+	}
+
+	userIDs := []int64{}
+	for _, webhook := range ws {
+		userIDs = append(userIDs, webhook.CreatedByID)
+	}
+
+	users, err := user.GetUsersByIDs(s, userIDs)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	for _, webhook := range ws {
+		webhook.maskCredentials()
+		if createdBy, has := users[webhook.CreatedByID]; has {
+			webhook.CreatedBy = createdBy
+		}
+	}
+
+	return ws, len(ws), total, err
+}
+
+// Update updates a webhook target
+// @Summary Change a webhook target's events.
+// @Description Change a webhook target's events. You cannot change other values of a webhook.
+// @tags webhooks
+// @Accept json
+// @Produce json
+// @Security JWTKeyAuth
+// @Param id path int true "Project ID"
+// @Param webhookID path int true "Webhook ID"
+// @Success 200 {object} models.Webhook "Updated webhook target"
+// @Failure 404 {object} web.HTTPError "The webhok target does not exist"
+// @Failure 500 {object} models.Message "Internal error"
+// @Router /projects/{id}/webhooks/{webhookID} [post]
+func (w *Webhook) Update(s *xorm.Session, _ web.Auth) (err error) {
+	for _, event := range w.Events {
+		if _, has := availableWebhookEvents[event]; !has {
+			return InvalidFieldError([]string{"events"})
+		}
+	}
+
+	_, err = s.Where("id = ?", w.ID).
+		Cols("events").
+		Update(w)
+	if err != nil {
+		return err
+	}
+
+	w.maskCredentials()
+	return
+}
+
+// Delete deletes a webhook target
+// @Summary Deletes an existing webhook target
+// @Description Delete any of the project's webhook targets.
+// @tags webhooks
+// @Accept json
+// @Produce json
+// @Security JWTKeyAuth
+// @Param id path int true "Project ID"
+// @Param webhookID path int true "Webhook ID"
+// @Success 200 {object} models.Message "Successfully deleted."
+// @Failure 404 {object} web.HTTPError "The webhok target does not exist."
+// @Failure 500 {object} models.Message "Internal error"
+// @Router /projects/{id}/webhooks/{webhookID} [delete]
+func (w *Webhook) Delete(s *xorm.Session, _ web.Auth) (err error) {
+	_, err = s.Where("id = ?", w.ID).Delete(&Webhook{})
+	return
+}
+
+func getWebhookHTTPClient() (client *http.Client) {
+	if webhookClient != nil {
+		return webhookClient
+	}
+
+	client = utils.NewSSRFSafeHTTPClient()
+	client.Timeout = time.Duration(config.WebhooksTimeoutSeconds.GetInt()) * time.Second
+
+	webhookClient = client
+	return
+}
+
+func (w *Webhook) sendWebhookPayload(p *WebhookPayload) (err error) {
+	payload, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost, w.TargetURL, bytes.NewReader(payload))
+	if err != nil {
+		return err
+	}
+
+	if len(w.Secret) > 0 {
+		sig256 := hmac.New(sha256.New, []byte(w.Secret))
+		_, err = sig256.Write(payload)
+		if err != nil {
+			log.Errorf("Could not generate webhook signature for Webhook %d: %s", w.ID, err)
+		}
+		signature := hex.EncodeToString(sig256.Sum(nil))
+		req.Header.Add("X-Vikunja-Signature", signature)
+	}
+
+	if len(w.BasicAuthUser) > 0 && len(w.BasicAuthPassword) > 0 {
+		req.Header.Add("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(w.BasicAuthUser+":"+w.BasicAuthPassword)))
+	}
+
+	req.Header.Add("User-Agent", "Vikunja/"+version.Version)
+	req.Header.Add("Content-Type", "application/json")
+
+	client := getWebhookHTTPClient()
+	res, err := client.Do(req) // #nosec G704 -- URL is user-configured webhook target
+	if err != nil {
+		return err
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode > 399 {
+		responseBody, readErr := io.ReadAll(io.LimitReader(res.Body, maxWebhookErrorBodySize))
+		if readErr != nil {
+			return fmt.Errorf("webhook %d returned status %d and reading its body failed: %w", w.ID, res.StatusCode, readErr)
+		}
+
+		log.Errorf("Got response with status %d from webhook %d: %s", res.StatusCode, w.ID, responseBody)
+		return fmt.Errorf("webhook %d returned non-success status %d", w.ID, res.StatusCode)
+	}
+
+	log.Debugf("Sent webhook payload for webhook %d for event %s", w.ID, p.EventName)
+	return
+}

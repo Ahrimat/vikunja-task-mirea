@@ -1,0 +1,743 @@
+{
+	"404": {
+		"title": "Nije pronađeno",
+		"text": "Stranica koju ste tražili ne postoji."
+	},
+	"home": {
+		"welcomeNight": "Dobra večer {username}!",
+		"welcomeMorning": "Dobro Jutro {username}!",
+		"welcomeDay": "Pozdrav {username}!",
+		"welcomeEvening": "Dobra večer {username}!",
+		"lastViewed": "Zadnje pregledano",
+		"addToHomeScreen": "Dodajte ovu aplikaciju na početni zaslon za brži pristup i poboljšano iskustvo.",
+		"goToOverview": "Idi na pregled",
+		"project": {
+			"importText": "Uvezite svoje projekte i zadatke iz drugih servisa u Vikunju:",
+			"import": "Uvezite svoje podatke u Vikunju"
+		}
+	},
+	"demo": {
+		"title": "Ova instanca je u demo modu. Ne koristite ju za stvarne podatke!",
+		"everythingWillBeDeleted": "Sve će se brisati u regularnim intervalima!",
+		"accountWillBeDeleted": "Vaš će račun biti izbrisan, uključujući sve projekte, zadatke i privitke koje ste izradili."
+	},
+	"ready": {
+		"loading": "Vikunja se učitava…",
+		"errorOccured": "Dogodila se pogreška:",
+		"checkApiUrl": "Provjerite je li api url točan.",
+		"noApiUrlConfigured": "Api url nije konfiguriran. Postavite jedan ispod:"
+	},
+	"offline": {
+		"title": "Izvan mreže ste.",
+		"text": "Provjerite mrežnu vezu i pokušajte ponovo."
+	},
+	"user": {
+		"auth": {
+			"username": "Korisničko ime",
+			"usernameEmail": "Korisničko ime ili Email adresa",
+			"usernamePlaceholder": "primjer frane",
+			"email": "E-mail adresa",
+			"emailPlaceholder": "primjer frane{'@'}vikunja.io",
+			"password": "Lozinka",
+			"forgotPassword": "Zaboravili ste lozinku?",
+			"resetPassword": "Ponovno postavite lozinku",
+			"resetPasswordAction": "Pošalji mi vezu za ponovno postavljanje lozinke",
+			"confirmEmailSuccess": "Uspješno ste potvrdili svoju e-poštu! Sada se možete prijaviti.",
+			"totpTitle": "Dvostruki kod za provjeru autentifikacije",
+			"totpPlaceholder": "primjer 123456",
+			"login": "Prijava",
+			"createAccount": "Izradi račun",
+			"loginWith": "Prijavi se putem {provider}",
+			"authenticating": "Provjera autentičnosti…",
+			"openIdStateError": "Stanje ne odgovara, odbijam nastavak!",
+			"logout": "Odjava",
+			"emailInvalid": "Molimo unesite valjanu e-mail adresu.",
+			"usernameRequired": "Molimo unesite korisničko ime.",
+			"usernameMustNotContainSpace": "Korisničko ime ne smije sadržavati razmake.",
+			"usernameMustNotLookLikeUrl": "Korisničko ime ne smije izgledati kao URL.",
+			"passwordRequired": "Molimo upišite lozinku.",
+			"passwordNotMin": "Lozinka treba imati barem 8 znakova.",
+			"showPassword": "Prikaži lozinku",
+			"hidePassword": "Sakrij lozinku",
+			"noAccountYet": "Još nemate račun?",
+			"alreadyHaveAnAccount": "Već imate račun?",
+			"remember": "Ostani prijavljen"
+		},
+		"settings": {
+			"title": "Postavke",
+			"newPasswordTitle": "Ažurirajte svoju lozinku",
+			"currentPasswordPlaceholder": "Vaša trenutna lozinka",
+			"passwordUpdateSuccess": "Lozinka je uspješno ažurirana.",
+			"updateEmailTitle": "Ažurirajte e-mail adresu",
+			"general": {
+				"title": "Opće postavke",
+				"savedSuccess": "Postavke su uspješno spremljene.",
+				"overdueReminders": "Šalji mi sažetak mojih neobavljenih zakašnjelih zadataka svaki dan",
+				"discoverableByName": "Dopusti drugim korisnicima da me dodaju kao člana u timove ili projekte kada traže moje ime",
+				"discoverableByEmail": "Dopusti drugim korisnicima da me dodaju kao člana u timove ili projekte kada traže moju punu e-poštu",
+				"playSoundWhenDone": "Pustite zvuk kada označavate zadatke kao obavljene",
+				"weekStart": "Tjedan počinje na",
+				"weekStartSunday": "Nedjelju",
+				"weekStartMonday": "Ponedjeljak",
+				"language": "Jezik",
+				"overdueTasksRemindersTime": "Vrijeme podsjetnika za zakašnjele zadatke putem e-pošte",
+				"filterUsedOnOverview": "Spremljeni filtar korišten na stranici pregleda"
+			},
+			"totp": {
+				"title": "Dvofaktorska autentikacija",
+				"enroll": "Učlani se",
+				"finishSetupPart2": "Nakon toga unesite kod iz svoje aplikacije u nastavku.",
+				"scanQR": "Alternativno, možete skenirati ovaj QR kod:",
+				"passcode": "Lozinka",
+				"setupSuccess": "Uspješno ste postavili dvostruku provjeru autentičnosti!",
+				"enterPassword": "Molimo unesite vašu lozinku",
+				"disable": "Isključite dvofaktorsku provjeru autentičnosti",
+				"disableSuccess": "Dvostruka provjera autentičnosti uspješno je onemogućena."
+			},
+			"caldav": {
+				"title": "CalDAV",
+				"more": "Više informacija o CalDAV-u u Vikunji",
+				"tokens": "CalDAV tokeni"
+			},
+			"avatar": {
+				"title": "Avatar",
+				"initials": "Inicijali",
+				"gravatar": "Gravatar",
+				"marble": "Mramor",
+				"upload": "Prenesi",
+				"uploadAvatar": "Učitaj avatar",
+				"statusUpdateSuccess": "Status avatara je uspješno ažuriran!",
+				"setSuccess": "Avatar je uspješno postavljen!"
+			},
+			"quickAddMagic": {
+				"title": "Brzo dodavanje čarobnog načina rada",
+				"disabled": "Onemogućeno",
+				"vikunja": "Vikunja"
+			},
+			"appearance": {
+				"title": "Paleta boja",
+				"colorScheme": {
+					"light": "Svjetlo",
+					"system": "Sistem",
+					"dark": "Tamno"
+				}
+			},
+			"apiTokens": {
+				"title": "API tokeni",
+				"general": "API tokeni omogućuju vam korištenje Vikunjinog API-ja bez korisničkih vjerodajnica.",
+				"apiDocs": "Provjerite api dokumentaciju",
+				"createAToken": "Kreiraj token",
+				"createToken": "Kreiraj token",
+				"30d": "30 dana",
+				"60d": "60 dana",
+				"90d": "90 dana",
+				"permissionExplanation": "Dopuštenja vam omogućuju da odredite što api token smije raditi.",
+				"titleRequired": "Naslov je obavezan",
+				"expired": "Ovaj je token istekao {ago}.",
+				"tokenCreatedSuccess": "Evo vašeg novog api tokena: {token}",
+				"tokenCreatedNotSeeAgain": "Čuvajte ga na sigurnom mjestu, nećete ga više vidjeti!",
+				"delete": {
+					"header": "Izbriši ovaj token",
+					"text1": "Jeste li sigurni da želite izbrisati token \"{token}\"?",
+					"text2": "Ovo će opozvati pristup svim aplikacijama ili integracijama koje ga koriste. Ovo ne možete poništiti."
+				},
+				"attributes": {
+					"title": "Naslov",
+					"titlePlaceholder": "Unesite naslov koji ćete prepoznati kasnije",
+					"expiresAt": "Ističe u",
+					"permissions": "Dopuštenja"
+				}
+			}
+		},
+		"deletion": {
+			"title": "Izbrišite svoj Vikunja račun",
+			"text1": "Brisanje vašeg računa je trajno i ne može se poništiti. Izbrisat ćemo sve vaše projekte, zadatke i sve što je povezano s tim.",
+			"text2": "Za nastavak molimo unesite svoju lozinku. Primit ćete e-poruku s daljnjim uputama.",
+			"text3": "Za nastavak pritisnite gumb ispod. Primit ćete e-poruku s daljnjim uputama.",
+			"confirm": "Izbriši moj račun",
+			"requestSuccess": "Zahtjev je bio uspješan. Primit ćete e-poruku s daljnjim uputama.",
+			"passwordRequired": "Molimo unesite vašu lozinku.",
+			"confirmSuccess": "Uspješno ste potvrdili brisanje svog računa. Izbrisat ćemo vaš račun za tri dana.",
+			"scheduled": "Izbrisat ćemo vaš Vikunja račun na {date} ({dateSince}).",
+			"scheduledCancel": "Za poništenje brisanja računa kliknite ovdje.",
+			"scheduledCancelText": "Da biste poništili brisanje svog računa, unesite svoju zaporku ispod:",
+			"scheduledCancelButton": "Da biste poništili brisanje svog računa, pritisnite gumb u nastavku:",
+			"scheduledCancelConfirm": "Otkaži brisanje mog računa",
+			"scheduledCancelSuccess": "Nećemo izbrisati vaš račun."
+		},
+		"export": {
+			"title": "Izvezite svoje Vikunja podatke",
+			"description": "Možete zatražiti kopiju svih svojih Vikunja podataka. To uključuje projekte, zadatke i sve što je s njima povezano. Ove podatke možete uvesti u bilo koju instancu Vikunje putem funkcije migracije.",
+			"descriptionPasswordRequired": "Molimo unesite svoju lozinku za nastavak:",
+			"request": "Zatraži kopiju mojih Vikunja podataka",
+			"success": "Uspješno ste zatražili svoje Vikunja podatke! Poslat ćemo vam e-poruku kada bude spreman za preuzimanje.",
+			"downloadTitle": "Preuzmite svoje izvezene Vikunja podatke"
+		}
+	},
+	"project": {
+		"archivedMessage": "Ovaj projekt je arhiviran. Za njega nije moguće kreirati nove ili uređivati ​​zadatke.",
+		"archived": "Arhivirano",
+		"showArchived": "Prikaži arhivu",
+		"color": "Boja",
+		"projects": "Projekti",
+		"parent": "Nadređeni projekt",
+		"search": "Upišite za traženje projekta…",
+		"searchSelect": "Kliknite ili pritisnite tipku enter za odabir ovog projekta",
+		"shared": "Dijeljeni projekti",
+		"noDescriptionAvailable": "Opis projekta nije dostupan.",
+		"inboxTitle": "Inbox",
+		"create": {
+			"header": "Novi projekt",
+			"titlePlaceholder": "Naslov projekta ide ovdje…",
+			"addTitleRequired": "Unesite naslov.",
+			"createdSuccess": "Projekt je uspješno kreiran.",
+			"addProjectRequired": "Navedi projekt ili postavi zadani projekt u postavkama."
+		},
+		"archive": {
+			"title": "Arhiviraj \"{project}\"",
+			"archive": "Arhiviraj ovaj projekt",
+			"unarchive": "Od-arhiviranje ovog projekta",
+			"success": "Projekt je uspješno arhiviran."
+		},
+		"background": {
+			"title": "Postavite pozadinu projekta",
+			"remove": "Ukloni pozadinu",
+			"upload": "Odaberite pozadinu sa svog računala",
+			"searchPlaceholder": "Potražite pozadinu…",
+			"poweredByUnsplash": "Pokreće Unsplash",
+			"loadMore": "Učitaj više fotografija",
+			"success": "Pozadina je uspješno postavljena!",
+			"removeSuccess": "Pozadina je uspješno uklonjena!"
+		},
+		"delete": {
+			"title": "Izbriši \"{project}\"",
+			"header": "Izbriši ovaj projekt",
+			"text1": "Jeste li sigurni da želite izbrisati ovaj projekt i sav njegov sadržaj?",
+			"text2": "Ovo uključuje sve zadatke i NE MOŽE SE PONIŠTITI!",
+			"success": "Projekt je uspješno izbrisan.",
+			"tasksToDelete": "Time će se nepovratno ukloniti cca. {count} zadataka.",
+			"tasksAndChildProjectsToDelete": "Time će se nepovratno ukloniti cca. {tasks} zadataka i {projects} projekata.",
+			"noTasksToDelete": "Ovaj projekt ne sadrži nikakve zadatke, trebalo bi ga biti sigurno izbrisati."
+		},
+		"duplicate": {
+			"title": "Dupliciraj ovaj projekt",
+			"label": "Duplikat",
+			"text": "Odaberite nadređeni projekt koji bi trebao sadržavati duplicirani projekt:",
+			"success": "Projekt je uspješno dupliciran."
+		},
+		"edit": {
+			"header": "Uredi ovaj projekt",
+			"title": "Uredi \"{project}\"",
+			"titlePlaceholder": "Naslov projekta ide ovdje…",
+			"identifierTooltip": "Identifikator projekta može se koristiti za jedinstvenu identifikaciju zadatka u projektima. Možete ga postaviti na prazno da biste ga onemogućili.",
+			"identifier": "Identifikator projekta",
+			"identifierPlaceholder": "Identifikator projekta ide ovdje…",
+			"description": "Opis",
+			"descriptionPlaceholder": "Unesite opis za ovaj projekt, pritisnite '/' za više opcija…",
+			"color": "Boja",
+			"success": "Projekt je uspješno ažuriran."
+		},
+		"share": {
+			"header": "Podijelite ovaj projekt",
+			"title": "Podijelite \"{project}\"",
+			"share": "Podijeli",
+			"links": {
+				"title": "Podijelite linkove",
+				"what": "Što su linkovi?",
+				"explanation": "Linkovi omogućuju jednostavno dijeljenje projekta s drugim korisnicima koji nemaju račun na Vikunji.",
+				"name": "Ime (nije obavezno)",
+				"namePlaceholder": "primjer teksta",
+				"nameExplanation": "Sve radnje izvršene ovim dijeljenjem veze prikazat će se s imenom.",
+				"password": "Lozinka (nije obavezno)",
+				"passwordExplanation": "Prilikom prijave, korisnik će morati unijeti ovu lozinku.",
+				"noName": "Nema postavljenog imena",
+				"remove": "Uklonite dijeljenje veze",
+				"removeText": "Jeste li sigurni da želite ukloniti ovu dijeljenu vezu? Ovom dijeljenom vezom više neće biti moguće pristupiti ovom projektu. To se ne može poništiti!",
+				"createSuccess": "Dijeljenje veze je uspješno kreirano.",
+				"deleteSuccess": "Dijeljenje veze je uspješno izbrisano",
+				"view": "Pregledaj",
+				"sharedBy": "Podijelio {0}"
+			},
+			"userTeam": {
+				"typeUser": "korisnik | Korisnici",
+				"typeTeam": "tim | timovi",
+				"shared": "Podijeljeno s ovim {type}",
+				"you": "Vi",
+				"notShared": "Još se ne dijeli ni s jednim {type}.",
+				"removeHeader": "Uklonite {type} iz {sharable}",
+				"removeText": "Jeste li sigurni da želite ukloniti ovo {sharable} iz {type}? To se ne može poništiti!",
+				"removeSuccess": "{sharable} je uspješno uklonjen iz {type}.",
+				"addedSuccess": "{type} je uspješno dodan.",
+				"updatedSuccess": "{type} je uspješno dodan."
+			},
+			"attributes": {
+				"link": "Poveznica",
+				"delete": "Obriši"
+			}
+		},
+		"list": {
+			"title": "Lista",
+			"add": "Dodaj",
+			"empty": "Ovaj projekt je trenutno prazan.",
+			"editTask": "Uredi zadatak"
+		},
+		"gantt": {
+			"title": "Gantt",
+			"size": "Veličina",
+			"default": "Zadano",
+			"month": "Mjesec",
+			"day": "Dan",
+			"hour": "Sat"
+		},
+		"table": {
+			"title": "Tablica",
+			"columns": "Stupci"
+		},
+		"kanban": {
+			"title": "Kanban"
+		},
+		"pseudo": {
+			"favorites": {
+				"title": "Favoriti"
+			}
+		},
+		"webhooks": {
+			"events": "Događaji",
+			"create": "Kreiraj webhook",
+			"secret": "Tajna",
+			"secretHint": "Ako je navedeno, svi zahtjevi za ciljni URL webhook-a bit će potpisani pomoću HMAC-a.",
+			"secretDocs": "Više pojedinosti o korištenju tajni potražite u dokumentaciji."
+		},
+		"views": {
+			"header": "Uredi poglede",
+			"title": "Naslov",
+			"actions": "Akcije",
+			"kind": "Vrsta",
+			"bucketConfigMode": "Način konfiguracije bucket-a",
+			"bucketConfig": "Bucket konfiguracija",
+			"bucketConfigManual": "Ručno",
+			"filter": "Filtriraj",
+			"create": "Stvaranje prikaza",
+			"createSuccess": "Prikaz je uspješno kreiran.",
+			"titleRequired": "Unesite naslov.",
+			"delete": "Izbriši ovaj prikaz",
+			"deleteText": "Jeste li sigurni da želite ukloniti ovaj prikaz? Više ga neće biti moguće koristiti za pregled zadataka u ovom projektu. Ova radnja neće izbrisati nijedan zadatak. To se ne može poništiti!",
+			"onlyAdminsCanEdit": "Samo administratori projekta mogu uređivati ​​prikaze."
+		}
+	},
+	"filters": {
+		"title": "Filteri",
+		"clear": "Poništi Filtere",
+		"showResults": "Prikaži rezultate",
+		"attributes": {
+			"title": "Naslov",
+			"titlePlaceholder": "Naslov spremljenog filtra ide ovdje…",
+			"description": "Opis",
+			"descriptionPlaceholder": "Ovdje dodajte opis za ovaj filter, pritisnite '/' za više opcija…",
+			"includeNulls": "Uključi zadatke koji nemaju postavljenu vrijednost"
+		},
+		"create": {
+			"title": "Novi spremljeni filter",
+			"description": "Spremljeni filter je virtualni projekt koji se izračunava iz skupa filtera svaki put kada mu se pristupi.",
+			"titleRequired": "Unesite naslov za filter."
+		},
+		"delete": {
+			"header": "Izbriši ovaj spremljeni filter",
+			"text": "Jeste li sigurni da želite izbrisati ovaj spremljeni filter?",
+			"success": "Filter je uspješno obrisan."
+		},
+		"edit": {
+			"title": "Uredite ovaj spremljeni filter",
+			"success": "Filter je uspješno spremljen."
+		},
+		"query": {
+			"placeholder": "Unesite upit za pretraživanje ili filtriranje…",
+			"help": {
+				"intro": "Za filtriranje zadataka možete koristiti sintaksu upita sličnu SQL-u. Dostupna polja za filtriranje uključuju:",
+				"link": "Kako ovo radi?",
+				"operators": {
+					"equal": "Jednako",
+					"greaterThan": "Veće od"
+				},
+				"logicalOperators": {
+					"and": "AND operator, odgovara ako su svi uvjeti istiniti",
+					"or": "OR operator, odgovara ako je bilo koji od uvjeta istinit",
+					"parentheses": "Zagrade za uvjete grupiranja"
+				},
+				"examples": {
+					"intro": "Evo nekoliko primjera upita za filtriranje:",
+					"priorityEqual": "Prikazuje zadatke s razinom prioriteta 4",
+					"dueDatePast": "Prikazuje neobavljene zadatke s rokom u prošlosti",
+					"undoneHighPriority": "Prikazuje neobavljene zadatke s razinom prioriteta 3 ili višom",
+					"assigneesIn": "Prikazuje zadatke dodijeljene \"user1\" ili \"user2\" korisnicima",
+					"priorityOneOrTwoPastDue": "Prikazuje zadatke s razinom prioriteta 1 ili 2 i rokom u prošlosti"
+				}
+			}
+		}
+	},
+	"migrate": {
+		"title": "Uvoz iz drugih servisa",
+		"titleService": "Uvezite svoje podatke iz {name} u Vikunju",
+		"description": "Za početak kliknite na logotip jedne od usluga trećih strana u nastavku.",
+		"descriptionDo": "Vikunja će uvesti sve popise, zadatke, bilješke, podsjetnike i datoteke kojima imate pristup.",
+		"authorize": "Da biste ovlastili Vikunju za pristup vašem {name} računu, kliknite gumb ispod.",
+		"getStarted": "Započnite",
+		"inProgress": "Uvoz u tijeku…",
+		"alreadyMigrated1": "Čini se da ste već uvezli svoje stvari od {name} u {date}.",
+		"alreadyMigrated2": "Ponovni uvoz je moguć, ali može stvoriti duplikate. Jesi li siguran?",
+		"confirm": "Siguran sam, počnite s migracijom sada!",
+		"importUpload": "Za uvoz podataka iz {name} u Vikunju, kliknite gumb ispod za odabir datoteke.",
+		"upload": "Učitaj datoteku",
+		"migrationStartedWillReciveEmail": "Vikunja će sada uvesti vaše popise/projekte, zadatke, bilješke, podsjetnike i datoteke iz {service}. Budući da će ovo potrajati neko vrijeme, poslat ćemo vam e-poruku kada završimo. Sada možete zatvoriti ovaj prozor.",
+		"migrationInProgress": "Trenutno je u tijeku migracija. Pričekajte dok ne bude gotovo."
+	},
+	"label": {
+		"title": "Oznake",
+		"manage": "Upravljalj oznakama",
+		"description": "Kliknite na oznaku da je uredite. Možete uređivati ​​sve oznake koje ste izradili, možete koristiti sve oznake koje su pridružene zadatku čijem projektu imate pristup.",
+		"newCTA": "Trenutno nemate nijednu oznaku.",
+		"create": {
+			"header": "Nova oznaka",
+			"title": "Kreiraj novu oznaku",
+			"titleRequired": "Unesite naslov.",
+			"success": "Oznaka je uspješno stvorena."
+		},
+		"edit": {
+			"header": "Uredite oznaku",
+			"success": "Oznaka je uspješno ažurirana."
+		},
+		"deleteSuccess": "The label was successfully obrisana.",
+		"attributes": {
+			"title": "Naslov",
+			"titlePlaceholder": "Naslov oznake ide ovdje…",
+			"description": "Opis",
+			"color": "Boja"
+		}
+	},
+	"sharing": {
+		"authenticating": "Autentificiranje…",
+		"passwordRequired": "Ovaj zajednički projekt zahtijeva lozinku. Unesite ju ispod:",
+		"error": "Dogodila se pogreška.",
+		"invalidPassword": "Lozinka je nevažeća."
+	},
+	"navigation": {
+		"overview": "Pregled",
+		"upcoming": "Nadolazeće",
+		"settings": "Postavke",
+		"imprint": "Imprint",
+		"privacy": "Pravila privatnosti"
+	},
+	"misc": {
+		"loading": "Učitavanje…",
+		"save": "Spremi",
+		"delete": "Obriši",
+		"confirm": "Potvrdi",
+		"cancel": "Otkaži",
+		"disable": "Onemogući",
+		"copy": "Kopiraj u Međuspremnik",
+		"copyError": "Kopiranje u međuspremnik nije uspjelo",
+		"searchPlaceholder": "Unesi za pretraživanje…",
+		"previous": "Prethodna",
+		"next": "Sljedeća",
+		"poweredBy": "Powered by Vikunja",
+		"create": "Kreiraj",
+		"doit": "Pokreni!",
+		"saving": "Spremanje…",
+		"saved": "Spremljeno!",
+		"default": "Zadano",
+		"close": "Zatvori",
+		"download": "Preuzmi",
+		"showMenu": "Prikaz izbornika",
+		"hideMenu": "Skrivanje izbornika",
+		"forExample": "Na primjer:",
+		"welcomeBack": "Dobrodošli natrag!",
+		"custom": "Prilagođeno",
+		"id": "ID",
+		"created": "Stvoreno u",
+		"createdBy": "Stvorio/la: {0}",
+		"actions": "Akcije",
+		"cannotBeUndone": "Ovo se ne može poništiti!",
+		"avatarOfUser": "Profilna slika od {user}"
+	},
+	"input": {
+		"resetColor": "Poništi boju",
+		"datepicker": {
+			"today": "Danas",
+			"tomorrow": "Sutra",
+			"nextMonday": "Sljedeći Ponedjeljak",
+			"thisWeekend": "Ovaj vikend",
+			"laterThisWeek": "Kasnije ovaj tjedan",
+			"nextWeek": "Sljedeći tjedan",
+			"chooseDate": "Odaberi datum"
+		},
+		"editor": {
+			"edit": "Uredi",
+			"heading1": "Zaglavlje 1",
+			"heading1Tooltip": "Zaglavlje velikog odjeljka.",
+			"heading2": "Zaglavlje 2",
+			"heading2Tooltip": "Zaglavlje srednjeg odjeljka.",
+			"heading3": "Zaglavlje 3",
+			"heading3Tooltip": "Zaglavlje malog odjeljka.",
+			"bold": "Podebljano",
+			"italic": "Koso",
+			"strikethrough": "Precrtano",
+			"underline": "Podcrtano",
+			"code": "Kod",
+			"codeTooltip": "Snimite isječak koda.",
+			"quote": "Citat",
+			"quoteTooltip": "Uhvatite citat.",
+			"bulletList": "Bullet list",
+			"bulletListTooltip": "Napravite jednostavan bullet list.",
+			"orderedList": "Poredana lista",
+			"orderedListTooltip": "Napravite popis s numeriranjem.",
+			"link": "Poveznica",
+			"image": "Slika",
+			"imageTooltip": "Učitajte sliku sa svog računala.",
+			"horizontalRule": "Vodoravno pravilo",
+			"horizontalRuleTooltip": "Podijelite sekciju.",
+			"text": "Tekst",
+			"textTooltip": "Samo počnite tipkati tekst.",
+			"taskList": "Lista zadataka",
+			"taskListTooltip": "Pratite zadatke pomoću todo liste.",
+			"undo": "Poništi",
+			"redo": "Ponovi",
+			"placeholder": "Upišite tekst ili pritisnite '/' da vidite više opcija…",
+			"table": {
+				"title": "Tablica",
+				"insert": "Umetni tablicu",
+				"addColumnBefore": "Dodaj stupac prije",
+				"addColumnAfter": "Dodaj stupac nakon",
+				"deleteColumn": "Izbriši stupac",
+				"toggleHeaderRow": "Promjena retka zaglavlja",
+				"toggleHeaderCell": "Promjena ćelije zaglavlja",
+				"mergeOrSplit": "Spajanje ili razdvajanje",
+				"fixTables": "Popravite tablice"
+			}
+		},
+		"multiselect": {
+			"selectPlaceholder": "Kliknite ili pritisnite Enter za odabir"
+		},
+		"datepickerRange": {
+			"to": "Za",
+			"from": "Od",
+			"fromto": "{from} za {to}",
+			"date": "Datum",
+			"ranges": {
+				"today": "Danas",
+				"thisWeek": "Ovaj tjedan",
+				"restOfThisWeek": "Ostatak tjedna",
+				"nextWeek": "Sljedeći tjedan",
+				"next7Days": "Sljedećih 7 dana",
+				"lastWeek": "Prošli Tjedan",
+				"thisMonth": "Ovaj mjesec",
+				"restOfThisMonth": "Ostatak mjeseca",
+				"nextMonth": "Sljedeći mjesec",
+				"next30Days": "Sljedećih 30 dana",
+				"lastMonth": "Prošli mjesec",
+				"thisYear": "Ova godina",
+				"restOfThisYear": "Ostatak godine"
+			},
+			"values": {
+				"now": "Sad",
+				"startOfToday": "Početak od danas",
+				"endOfToday": "Kraj od danas",
+				"beginningOflastWeek": "Početak prošlog tjedna",
+				"endOfLastWeek": "Kraj prošlog tjedna",
+				"beginningOfThisWeek": "Početak ovog tjedna",
+				"endOfThisWeek": "Kraj ovog tjedna",
+				"startOfNextWeek": "Početak sljedećeg tjedna",
+				"endOfNextWeek": "Kraj sljedećeg tjedna",
+				"in7Days": "Za 7 dana",
+				"beginningOfLastMonth": "Početak prošlog mjeseca",
+				"endOfLastMonth": "Kraj prošlog mjeseca",
+				"startOfThisMonth": "Početak ovog mjeseca",
+				"endOfThisMonth": "Kraj ovog mjeseca",
+				"startOfNextMonth": "Početak sljedećeg mjeseca",
+				"endOfNextMonth": "Kraj sljedećeg mjeseca"
+			}
+		},
+		"datemathHelp": {
+			"canuse": "Možete koristiti matematiku datuma za filtriranje relativnih datuma.",
+			"learnhow": "Provjerite kako radi",
+			"title": "Matematika Datuma",
+			"intro": "Navedite relativne datume koje Vikunja rješava u hodu prilikom primjene filtra.",
+			"expression": "Svaki izraz Date Math počinje korijenskim datumom, koji može biti {0} ili datumski niz koji završava s {1}. Ovaj korijenski datum po izboru može biti praćen jednim ili više matematičkih izraza.",
+			"similar": "Ovi su izrazi slični onima koje pružaju {0} i {1}.",
+			"add1Day": "Dodaj jedan dan",
+			"units": {
+				"seconds": "Sekunde",
+				"minutes": "Minute",
+				"hours": "Sati",
+				"days": "Dana",
+				"weeks": "Tjedana",
+				"months": "Mjeseci",
+				"years": "Godina"
+			},
+			"examples": {
+				"now": "Upravo sad",
+				"in24h": "U 24h",
+				"today": "Danas u 00:00"
+			}
+		}
+	},
+	"task": {
+		"createSuccess": "Zadatak je uspješno kreiran.",
+		"doneSuccess": "Zadatak je uspješno označen kao obavljen.",
+		"undoneSuccess": "Zadatak je uspješno uklonjen iz izvršenih.",
+		"undo": "Poništi",
+		"checklistTotal": "{checked} od {total} zadataka",
+		"checklistAllDone": "{total} zadataka",
+		"show": {
+			"titleCurrent": "Trenutni zadaci",
+			"overdue": "Prikaži zakašnjele zadatke",
+			"fromuntil": "Zadaci od {from} do {until}",
+			"select": "Odaberi vremenski raspon",
+			"noTasks": "Ništa za napraviti — ugodan dan!"
+		},
+		"detail": {
+			"chooseDueDate": "Kliknite ovdje za postavljanje kranjeg datuma",
+			"chooseStartDate": "Kliknite ovdje za postavljanje početnog datuma",
+			"chooseEndDate": "Kliknite ovdje za postavljanje završnog datuma",
+			"move": "Premjesti zadatak u drugi projekt",
+			"done": "Označi kao gotovo!",
+			"undone": "Označi kao nedovršeno",
+			"created": "Stvoreno {0} od {1}",
+			"updated": "Ažurirao {0}",
+			"doneAt": "Završio {0}",
+			"updateSuccess": "Zadatak je uspješno spremljen.",
+			"deleteSuccess": "Zadatak je uspješno izbrisan.",
+			"belongsToProject": "Ovaj zadatak pripada projektu '{project}'",
+			"due": "Do {at}",
+			"organization": "Organizacija",
+			"management": "Menadžment",
+			"dateAndTime": "Datum i vrijeme",
+			"delete": {
+				"header": "Izbriši ovaj zadatak",
+				"text1": "Jeste li sigurni da želite izbrisati ovaj zadatak?",
+				"text2": "Ovo će također ukloniti sve privitke, podsjetnike i odnose povezane s ovim zadatkom i ne može se poništiti!"
+			},
+			"actions": {
+				"assign": "Dodijeli korisniku",
+				"label": "Dodaj oznaku",
+				"priority": "Postavi prioritet",
+				"dueDate": "Postavi datum dospijeća",
+				"startDate": "Postavi datum početka",
+				"endDate": "Postavi datum kraja",
+				"reminders": "Postavi podsjetnike",
+				"repeatAfter": "Postavite interval ponavljanja",
+				"percentDone": "Postavi napredak",
+				"attachments": "Dodaj privitke",
+				"relatedTasks": "Dodaj odnos",
+				"moveProject": "Pomakni",
+				"color": "Podesi boju",
+				"delete": "Izbriši",
+				"favorite": "Dodaj u Favorite",
+				"unfavorite": "Ukloni iz Favorita"
+			}
+		},
+		"attributes": {
+			"assignees": "Dodijeljeno",
+			"color": "Boja",
+			"created": "Kreirano",
+			"createdBy": "Kreirao korisnik",
+			"description": "Opis",
+			"done": "Gotovo",
+			"dueDate": "Rok",
+			"endDate": "Datum Završetka",
+			"labels": "Oznake",
+			"percentDone": "Napredak",
+			"priority": "Prioritet",
+			"relatedTasks": "Povezani zadaci",
+			"reminders": "Podsjetnici",
+			"repeat": "Ponavljanja",
+			"startDate": "Početni datum",
+			"title": "Naslov",
+			"updated": "Ažurirano",
+			"doneAt": "Dovršeno u"
+		},
+		"subscription": {
+			"subscribedProject": "Trenutno ste pretplaćeni na ovaj projekt i primat ćete obavijesti o promjenama.",
+			"notSubscribedProject": "Niste pretplaćeni na ovaj projekt i nećete primati obavijesti o promjenama.",
+			"subscribedTask": "Trenutno ste pretplaćeni na ovaj zadatak i primat ćete obavijesti o promjenama.",
+			"notSubscribedTask": "Niste pretplaćeni na ovaj zadatak i nećete primati obavijesti o promjenama.",
+			"subscribe": "Pretplati se",
+			"unsubscribe": "Otkaži Pretplatu",
+			"subscribeSuccessProject": "Sada ste pretplaćeni na ovaj projekt",
+			"unsubscribeSuccessProject": "Sada ste otkazali pretplatu na ovaj projekt",
+			"subscribeSuccessTask": "Sada ste pretplaćeni na ovaj zadatak",
+			"unsubscribeSuccessTask": "Sada ste otkazali pretplatu na ovaj zadatak"
+		},
+		"attachment": {
+			"title": "Privitci",
+			"createdBy": "stvoreno {0} od {1}",
+			"downloadTooltip": "Preuzmi ovaj privitak",
+			"upload": "Učitaj privitak",
+			"drop": "Ispustite datoteke ovdje za prijenos",
+			"delete": "Izbriši privitak",
+			"deleteTooltip": "Izbriši ovaj prilog",
+			"deleteText1": "Jeste li sigurni da želite izbrisati privitak {filename}?"
+		},
+		"description": {
+			"placeholder": "Unesite opis, pritisnite '/' za više opcija…"
+		},
+		"assignee": {
+			"placeholder": "Upišite korisnika kojeg želite označiti…",
+			"selectPlaceholder": "Dodijelite ovog korisnika",
+			"assignSuccess": "Korisnik je uspješno dodijeljen.",
+			"unassignSuccess": "Korisnik više nije dodijeljen."
+		},
+		"label": {
+			"createPlaceholder": "Dodajte ovo kao novu oznaku",
+			"addSuccess": "Oznaka je uspješno dodana.",
+			"removeSuccess": "Oznaka je uspješno izbrisana.",
+			"addCreateSuccess": "Oznaka je stvorena i uspješno dodana.",
+			"delete": {
+				"header": "Izbriši ovu oznaku"
+			}
+		},
+		"priority": {
+			"low": "Nizak",
+			"medium": "Srednji",
+			"high": "Visoki",
+			"urgent": "Hitno",
+			"doNow": "NAPRAVI SADA"
+		},
+		"relation": {
+			"add": "Dodajte novu relaciju zadatka",
+			"kinds": {
+				"related": "Povezani zadatak | Povezani zadaci",
+				"duplicateof": "Duplikat | Duplikati",
+				"duplicates": "Duplikati | Duplikati"
+			}
+		},
+		"reminder": {
+			"beforeShort": "prije",
+			"afterShort": "kasnije",
+			"custom": "Prilagođeno"
+		},
+		"repeat": {
+			"monthly": "Mjesečno",
+			"fromCurrentDate": "Od datuma završetka",
+			"each": "Svaki",
+			"specifyAmount": "Navedite iznos…",
+			"hours": "Sati",
+			"days": "Dana",
+			"weeks": "Tjedana",
+			"invalidAmount": "Unesite više od 0."
+		},
+		"quickAddMagic": {
+			"hint": "Upotrijebite čarobne prefikse za definiranje rokova, ovlaštenih osoba i drugih svojstava zadatka.",
+			"title": "Brzo dodavanje čarobnog načina rada",
+			"intro": "Prilikom izrade zadatka možete koristiti posebne ključne riječi za izravno dodavanje atributa novostvorenom zadatku. To omogućuje puno brže dodavanje često korištenih atributa zadacima.",
+			"dateAndTime": "Datum i vrijeme"
+		}
+	},
+	"team": {
+		"edit": {
+			"addUser": "Dodaj u tim",
+			"makeMember": "Učini članom",
+			"makeAdmin": "Učini adminom",
+			"success": "Tim je uspješno ažuriran."
+		}
+	}
+}

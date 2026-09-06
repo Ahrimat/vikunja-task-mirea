@@ -1,0 +1,1018 @@
+{
+	"404": {
+		"title": "Ei löytynyt",
+		"text": "Pyytämääsi sivua ei ole olemassa."
+	},
+	"home": {
+		"welcomeNight": "Hyvää Yötä {username}!",
+		"welcomeMorning": "Hyvää Huomenta {username}!",
+		"welcomeMorningBack": "Tervetuloa takaisin, {username}",
+		"welcomeTuesday": "Hyvää tiistaita, {username}",
+		"welcomeWednesdayMid": "On jo keskiviikko, {username}",
+		"welcomeDay": "Moi {username}!",
+		"welcomeEvening": "Hyvää Iltaa {username}!",
+		"lastViewed": "Viimeksi katsottu",
+		"addToHomeScreen": "Lisää tämä sovellus aloitusnäyttöösi saadaksesi nopeamman pääsyn ja paremman kokemuksen.",
+		"goToOverview": "Siirry yleisnäkymään",
+		"project": {
+			"importText": "Tuo projektisi ja tehtäväsi muista palveluista Vikunjaan:",
+			"import": "Tuo tietosi Vikunjaan"
+		}
+	},
+	"demo": {
+		"title": "Tämä ilmentymä on demotilassa. Älä käytä tätä oikeisiin tietoihin!",
+		"everythingWillBeDeleted": "Kaikki poistetaan säännöllisin väliajoin!",
+		"accountWillBeDeleted": "Tilisi poistetaan, mukaan lukien kaikki projektit, tehtävät ja liitteet, joita saatat luoda."
+	},
+	"ready": {
+		"loading": "Ladataan Vikunjaa…",
+		"errorOccured": "Tapahtui virhe:",
+		"checkApiUrl": "Ole hyvä ja tarkista, onko api url oikein.",
+		"noApiUrlConfigured": "API url-osoitetta ei ole määritelty. Aseta sellainen alla:"
+	},
+	"offline": {
+		"title": "Olet offline-tilassa.",
+		"text": "Tarkista verkkoyhteytesi ja yritä uudelleen."
+	},
+	"user": {
+		"auth": {
+			"username": "Käyttäjätunnus",
+			"usernameEmail": "Käyttäjätunnus Tai Sähköpostiosoite",
+			"usernamePlaceholder": "esim. frederick",
+			"email": "Sähköpostiosoite",
+			"emailPlaceholder": "esim. frederic{'@'}vikunja.io",
+			"password": "Salasana",
+			"forgotPassword": "Unohditko salasanasi?",
+			"resetPassword": "Palauta salasanasi",
+			"resetPasswordAction": "Lähetä minulle salasanan palautuslinkki",
+			"resetPasswordSuccess": "Tarkasta sähköpostisi! Sinulla pitäisi olla viesti, joka sisältää ohjeen kuinka palauttaa salasanasi.",
+			"confirmEmailSuccess": "Vahvistit sähköpostisi onnistuneesti! Voit kirjautua sisään nyt.",
+			"totpTitle": "Kaksivaiheisen Tunnistautumisen Koodi",
+			"totpPlaceholder": "esim. 123456",
+			"login": "Kirjaudu sisään",
+			"createAccount": "Luo tili",
+			"loginWith": "Kirjaudu sisään käyttäen {provider}-palvelua",
+			"authenticating": "Todennetaan…",
+			"openIdStateError": "Tila ei täsmää, kieltäydytään jatkamasta!",
+			"openIdGeneralError": "Tapahtui virhe todennettaessa kolmatta osapuolta vastaan.",
+			"desktopTryDemo": "Kokeile Demoa",
+			"desktopWaitingForAuth": "Odotetaan autentikointia…",
+			"desktopOAuthError": "Autentikointi epäonnistui: {error}",
+			"logout": "Kirjaudu ulos",
+			"emailInvalid": "Ole hyvä ja syötä kelvollinen sähköpostiosoite.",
+			"usernameRequired": "Ole hyvä ja anna käyttäjätunnus.",
+			"usernameMustNotContainSpace": "Käyttäjätunnus ei saa sisältää välilyöntejä.",
+			"usernameMustNotLookLikeUrl": "Käyttäjätunnus ei saa näyttää URL-osoitteelta.",
+			"passwordRequired": "Ole hyvä ja anna salasana.",
+			"passwordNotMin": "Salasanassa on oltava vähintään 8 merkkiä.",
+			"passwordNotMax": "Salasanassa saa olla enintään 72 merkkiä.",
+			"showPassword": "Näytä salasana",
+			"hidePassword": "Piilota salasana",
+			"noAccountYet": "Eikö sinulla ole vielä tiliä?",
+			"alreadyHaveAnAccount": "Onko sinulla jo tili?",
+			"remember": "Pysy kirjautuneena",
+			"registrationDisabled": "Rekisteröinti on poistettu käytöstä."
+		},
+		"settings": {
+			"title": "Asetukset",
+			"newPasswordTitle": "Päivitä Salasanasi",
+			"newPassword": "Uusi salasana",
+			"currentPassword": "Nykyinen salasana",
+			"currentPasswordPlaceholder": "Nykyinen salasanasi",
+			"passwordUpdateSuccess": "Salasana päivitettiin onnistuneesti.",
+			"updateEmailTitle": "Päivitä Sähköpostiosoitteesi",
+			"updateEmailNew": "Uusi sähköpostiosoite",
+			"general": {
+				"title": "Yleiset Asetukset",
+				"name": "Oma Nimi",
+				"newName": "Uusi nimi",
+				"savedSuccess": "Asetukset päivitettiin onnistuneesti.",
+				"emailReminders": "Lähetä minulle tehtävä muistutuksia sähköpostilla",
+				"overdueReminders": "Lähetä minulle yhteenveto erääntyneistä keskeneräisistä tehtävistäni joka päivä",
+				"discoverableByName": "Salli muiden käyttäjien lisätä minut jäseneksi tiimeihin tai projekteihin, kun he etsivät nimeäni",
+				"discoverableByEmail": "Salli muiden käyttäjien lisätä minut jäseneksi tiimeihin tai projekteihin, kun he etsivät koko sähköpostiani",
+				"playSoundWhenDone": "Toista ääni, kun tehtävä merkitään valmiiksi",
+				"alwaysShowBucketTaskCount": "Näytä aina tehtävien lukumäärä Kanban sarakkeissa",
+				"weekStart": "Viikon ensimmäinen päivä",
+				"weekStartSunday": "Sunnuntai",
+				"weekStartMonday": "Maanantai",
+				"language": "Kieli",
+				"defaultProject": "Oletus projekti",
+				"defaultView": "Oletusnäkymä",
+				"timezone": "Aikavyöhyke",
+				"overdueTasksRemindersTime": "Erääntyneiden tehtävien muistutus sähköpostin aika",
+				"filterUsedOnOverview": "Tallennettu yleisnäkymä-sivulla käytetty suodatin",
+				"minimumPriority": "Pienin prioriteetti, jolla tehtävä näkyy",
+				"dateDisplayOptions": {
+					"mm-dd-yyyy": "MM-DD-YYYY",
+					"dd-mm-yyyy": "DD-MM-YYYY",
+					"yyyy-mm-dd": "YYYY-MM-DD",
+					"mm/dd/yyyy": "MM/DD/YYYY",
+					"dd/mm/yyyy": "DD/MM/YYYY",
+					"yyyy/mm/dd": "YYYY/MM/DD"
+				},
+				"timeFormat": "Aikamuoto",
+				"timeFormatOptions": {
+					"12h": "12-tuntia (AM/PM)",
+					"24h": "24-tuntia (HH:mm)"
+				},
+				"externalUserNameChange": "Nimeäsi hallinnoi kirjautumisoperaattori ({provider}). Muuttaaksesi sen, päivitä se siellä."
+			},
+			"sections": {
+				"personalInformation": "Henkilökohtaiset Tiedot",
+				"taskAndNotifications": "Projektit & Tehtävät",
+				"privacy": "Yksityisyys",
+				"localization": "Kielivalinnat",
+				"appearance": "Ulkoasu & Käyttäytyminen"
+			},
+			"totp": {
+				"title": "Kaksivaiheinen Tunnistautuminen",
+				"enroll": "Ota käyttöön",
+				"finishSetupPart1": "Viimeistelläksesi määrityksen, käytä tätä salaisuutta TOTP-sovelluksessasi (Google Authenticator tai vastaava):",
+				"finishSetupPart2": "Sen jälkeen syötä koodi sovelluksestasi alle.",
+				"scanQR": "Vaihtoehtoisesti voit skannata tämän QR-koodin:",
+				"passcode": "TOTP-koodi",
+				"passcodePlaceholder": "TOTP sovelluksen generoima koodi",
+				"setupSuccess": "Olet määrittänyt kaksivaiheinen tunnistautumisen onnistuneesti!",
+				"enterPassword": "Ole Hyvä ja Syötä Salasanasi",
+				"disable": "Poista kaksivaiheinen tunnistautuminen käytöstä",
+				"disableSuccess": "Kaksivaiheinen tunnistautuminen poistettu käytöstä onnistuneesti."
+			},
+			"caldav": {
+				"title": "CalDAV",
+				"more": "Lisätietoja CalDAVista Vikunjassa",
+				"tokens": "CalDAV Tokenit"
+			},
+			"avatar": {
+				"title": "Profiilikuva",
+				"initials": "Etukirjaimet",
+				"gravatar": "Gravatar",
+				"marble": "Marble",
+				"upload": "Lataa",
+				"uploadAvatar": "Lataa Profiilikuva",
+				"statusUpdateSuccess": "Profiilikuvan tila päivitettiin onnistuneesti!",
+				"setSuccess": "Profiilikuva on asetettu onnistuneesti!"
+			},
+			"quickAddMagic": {
+				"title": "Nopean Lisäyksen Tyyli",
+				"disabled": "Pois käytöstä",
+				"todoist": "Todoist",
+				"vikunja": "Vikunja"
+			},
+			"appearance": {
+				"title": "Väriteema",
+				"colorScheme": {
+					"light": "Vaalea",
+					"system": "Järjestelmä",
+					"dark": "Tumma"
+				}
+			},
+			"backgroundBrightness": {
+				"title": "Taustan kirkkaus"
+			},
+			"apiTokens": {
+				"title": "API Tokenit",
+				"general": "API tokeneilla voit käyttää VIkunjaa ilman käyttäjätunnuksia.",
+				"apiDocs": "Tutustu api dokumentaatioon",
+				"createAToken": "Luo token",
+				"createToken": "Luo token",
+				"30d": "30 Päivää",
+				"60d": "60 Päivää",
+				"90d": "90 Päivää",
+				"permissionExplanation": "Oikeuksilla voit määritellä mitä api token saa tehdä.",
+				"titleRequired": "Otsikko on pakollinen",
+				"permissionRequired": "Valitse ainakin yksi käyttöoikeus listalta.",
+				"tokenCreatedSuccess": "Tässä on uusi api tokenisi: {token}",
+				"tokenCreatedNotSeeAgain": "Tallenna se turvalliseen paikkaan, et näe sitä uudelleen!",
+				"delete": {
+					"header": "Poista tämä token",
+					"text1": "Oletko varma, että haluat poistaa tokenin \"{token}\"?",
+					"text2": "Tämä kumoaa pääsyn kaikkiin sovelluksiin tai integraatioihin, jotka käyttävät sitä. Tätä toimintoa ei voi peruuttaa."
+				},
+				"attributes": {
+					"title": "Otsikko",
+					"titlePlaceholder": "Syötä otsikko, jonka tunnistat myöhemmin",
+					"expiresAt": "Vanhentumisaika",
+					"permissions": "Oikeudet"
+				}
+			},
+			"sessions": {
+				"deviceInfo": "Laite",
+				"ipAddress": "IP-Osoite",
+				"lastActive": "Viimeksi Aktiivinen",
+				"noOtherSessions": "Ei muita aktiivisia sessioita."
+			}
+		},
+		"deletion": {
+			"title": "Poista Vikunja-tilisi",
+			"text1": "Tilisi poistaminen on pysyvä eikä sitä voi peruuttaa. Poistamme kaikki projektisi, tehtäväsi ja kaiken siihen liittyvän.",
+			"text2": "Jatkaaksesi, ole hyvä ja syötä salasanasi. Saat sähköpostin, jossa on lisäohjeita.",
+			"text3": "Jatkaaksesi, ole hyvä ja paina alla olevaa painiketta. Saat sähköpostin, jossa on lisäohjeita.",
+			"confirm": "Poista tilini",
+			"requestSuccess": "Pyyntö onnistui. Saat sähköpostin, jossa on lisäohjeita.",
+			"passwordRequired": "Ole hyvä ja syötä salasanasi.",
+			"confirmSuccess": "Olet onnistuneesti vahvistanut tilisi poistamisen. Poistamme tilisi kolmen päivän kuluessa.",
+			"scheduled": "Poistamme Vikunja-tilisi {date} ({dateSince}).",
+			"scheduledCancel": "Peruaksesi tilisi poistamisen, paina tästä.",
+			"scheduledCancelText": "Peruaksesi tilisi poistamisen, ole hyvä ja syötä salasanasi alle:",
+			"scheduledCancelButton": "Peruaksesi tilisi poistamisen, ole hyvä ja paina alla olevaa painiketta:",
+			"scheduledCancelConfirm": "Peruuta tilini poistaminen",
+			"scheduledCancelSuccess": "Emme poista tiliäsi."
+		},
+		"export": {
+			"title": "Vie Vikunja tiedot",
+			"description": "Voit pyytää kopion kaikista Vikunja tiedoistasi. Tämä sisältää Projektisi, Tehtäväsi ja kaiken niihin liittyvän. Voit tuoda tietosi mihin tahansa Vikunja instanssiin migraatio ominaisuuden kautta.",
+			"descriptionPasswordRequired": "Syötä salasanasi jatkaaksesi:",
+			"request": "Pyydä kopio Vikunja Tiedoistani",
+			"success": "Olet onnistuneesti pyytänyt Vikunja Tietosi! Lähetämme sinulle sähköpostiviestin, kun ne ovat valmiit ladattavaksi.",
+			"downloadTitle": "Lataa viedyt Vikunja tietosi",
+			"ready": "Tietosi ovat ladattavissa. Voi ladata ne {0} asti."
+		}
+	},
+	"project": {
+		"archivedMessage": "Tämä projekti on arkistoitu. Siihen ei voi luoda uusia tai muokata olemassa olevia tehtäviä.",
+		"archived": "Arkistoitu",
+		"showArchived": "Näytä Arkistoidut",
+		"title": "Otsikko",
+		"color": "Väri",
+		"projects": "Projektit",
+		"parent": "Ylätason Projekti",
+		"search": "Kirjoita hakeaksesi projektia…",
+		"searchSelect": "Klikkaa tai paina enter valitaksesi tämän projektin",
+		"shared": "Jaetut Projektit",
+		"noDescriptionAvailable": "Projektin kuvausta ei ole saatavilla.",
+		"favorite": "Merkitse tämä projekti suosikiksi",
+		"unfavorite": "Poista tämä projekti suosikeista",
+		"openSettingsMenu": "Avaa projektin asetusvalikko",
+		"description": "Projektin kuvaus",
+		"favoriteDescription": "Kaikki tämän projektin tehtävät on merkkitty suosikeiksi.",
+		"create": {
+			"header": "Uusi projekti ",
+			"titlePlaceholder": "Projektin otsikko menee tähän…",
+			"addTitleRequired": "Ole hyvä ja anna otsikko.",
+			"createdSuccess": "Projekti luotiin onnistuneesti.",
+			"addProjectRequired": "Ole hyvä ja määritä projekti tai aseta oletusprojekti asetuksissa."
+		},
+		"archive": {
+			"title": "Arkistoi \"{project}\"",
+			"archive": "Arkistoi tämä projekti",
+			"unarchive": "Poista tämä projekti arkistosta",
+			"unarchiveText": "Voit luoda tehtäviä tai muokata sitä.",
+			"archiveText": "Et voi muokata tätä projektia tai luoda tehtäviä ennen kuin poistat sen arkistosta.",
+			"success": "Projekti arkistoitiin onnistuneesti."
+		},
+		"background": {
+			"title": "Aseta projektin taustakuva",
+			"remove": "Poista taustakuva",
+			"upload": "Valitse taustakuva tietokoneeltasi",
+			"searchPlaceholder": "Hae taustakuvaa…",
+			"poweredByUnsplash": "Powered by Unsplash",
+			"loadMore": "Lataa lisää kuvia",
+			"success": "Taustakuva asetettiin onnistuneesti!",
+			"removeSuccess": "Taustakuva poistettiin onnistuneesti!"
+		},
+		"delete": {
+			"title": "Poista \"{project}\"",
+			"header": "Poista tämä projekti",
+			"text1": "Oletko varma, että haluat poistaa tämän projektin ja kaiken sen sisällön?",
+			"text2": "Tämä sisältää kaikki tehtävät ja TÄTÄ EI VOI PERUA!",
+			"success": "Projekti poistettiin onnistuneesti.",
+			"tasksToDelete": "Tämä poistaa pysyvästi noin {count} tehtävää.",
+			"tasksAndChildProjectsToDelete": "Tämä poistaa pysyvästi noin {tasks} tehtävää ja {projects} projektia.",
+			"noTasksToDelete": "Tämä projekti ei sisällä yhtään tehtävää, se pitäisi olla turvallinen poistaa."
+		},
+		"duplicate": {
+			"title": "Monista tämä projekti",
+			"label": "Monista",
+			"text": "Valitse ylätason projekti monistetulle projektille:",
+			"success": "Projekti monistettiin onnistuneesti."
+		},
+		"edit": {
+			"header": "Muokkaa Tätä Projektia",
+			"title": "Muokkaa \"{project}\"",
+			"titlePlaceholder": "Projektin otsikko menee tähän…",
+			"identifier": "Projektin Tunniste",
+			"identifierPlaceholder": "Projektin tunniste menee tähän…",
+			"description": "Kuvaus",
+			"descriptionPlaceholder": "Anna kuvaus tälle projektille, paina '/' saadaksesi lisää vaihtoehtoja…",
+			"color": "Väri",
+			"success": "Projekti päivitettiin onnistuneesti."
+		},
+		"share": {
+			"header": "Jaa tämä projekti",
+			"title": "Jaa \"{project}\"",
+			"share": "Jaa",
+			"links": {
+				"title": "Jako Linkki",
+				"what": "Mikä on jako linkki?",
+				"explanation": "Jako Linkit mahdollistavat projektin jakamisen käyttäjien kanssa, joilla ei ole Vikunja-tiliä.",
+				"create": "Luo jako linkki",
+				"name": "Nimi (valinnainen)",
+				"namePlaceholder": "esim. Lorem Ipsum",
+				"password": "Salasana (valinnainen)",
+				"passwordExplanation": "Käyttäjän kirjautuessa sisään, heidän on syötettävä tämä salasana.",
+				"noName": "Nimeä ei ole asetettu",
+				"remove": "Poista jako linkki",
+				"removeText": "Haluatko varmasti poistaa tämän linkki jaon? Tähän projektiin ei enää voi päästä käsiksi tällä linkki jaolla. Tätä ei voi peruuttaa!",
+				"createSuccess": "Linkki jako luotiin onnistuneesti.",
+				"deleteSuccess": "Linkki jako poistettiin onnistuneesti"
+			},
+			"userTeam": {
+				"typeUser": "käyttäjä | käyttäjät",
+				"typeTeam": "tiimi | tiimit",
+				"you": "Sinä",
+				"addedSuccess": "{type} lisättiin onnistuneesti.",
+				"updatedSuccess": "{type} lisättiin onnistuneesti."
+			},
+			"attributes": {
+				"delete": "Poista"
+			}
+		},
+		"first": {
+			"title": "Ensi Näkymä"
+		},
+		"list": {
+			"title": "Lista",
+			"add": "Lisää",
+			"addPlaceholder": "Lisää tehtävä…",
+			"empty": "Tämä projekti on tällä hetkellä tyhjä.",
+			"newTaskCta": "Luo tehtävä",
+			"editTask": "Muokkaa tehtävää"
+		},
+		"gantt": {
+			"title": "Gantt",
+			"size": "Koko",
+			"default": "Oletus",
+			"month": "Kuukausi",
+			"day": "Päivä",
+			"hour": "Tunti"
+		},
+		"table": {
+			"title": "Taulukko",
+			"columns": "Sarakkeet"
+		},
+		"kanban": {
+			"title": "Kanban",
+			"limit": "Raja: {limit}",
+			"doneBucket": "Valmiit sarake",
+			"doneBucketHint": "Kaikki tähän sarakkeeseen lisätyt tehtävät merkitään automaattisesti valmiiksi.",
+			"doneBucketHintExtended": "Kaikki tähän sarakkeeseen lisätyt tehtävät merkitään automaattisesti valmiiksi. Muualla valmiiksi merkityt tehtävät siirretään myös.",
+			"doneBucketSavedSuccess": "Valmiit sarake tallennettiin onnistuneesti.",
+			"defaultBucket": "Oletus sarake",
+			"defaultBucketHint": "Kun uusia tehtäviä luodaan määrittelemättä saraketta, ne lisätään tähän sarakkeeseen.",
+			"defaultBucketSavedSuccess": "Oletus sarake tallennettiin onnistuneesti.",
+			"deleteLast": "Et voi poistaa viimeistä saraketta.",
+			"addTaskPlaceholder": "Syötä tehtävän uusi otsikko…",
+			"addTask": "Lisää tehtävä",
+			"addAnotherTask": "Lisää toinen tehtävä",
+			"addBucket": "Luo sarake",
+			"addBucketPlaceholder": "Syötä uuden sarakkeen nimi...",
+			"deleteHeaderBucket": "Poista sarake",
+			"deleteBucketText1": "Haluatko varmasti poistaa tämän sarakkeen?",
+			"deleteBucketText2": "Tämä ei poista mitään tehtäviä, vaan siirtää ne oletus sarakkeeseen.",
+			"deleteBucketSuccess": "Sarake poistettiin onnistuneesti.",
+			"bucketTitleSavedSuccess": "Sarakkeen otsikko tallennettiin onnistuneesti.",
+			"bucketLimitSavedSuccess": "Sarakkeen raja tallennettiin onnistuneesti.",
+			"collapse": "Kutista tämä sarake",
+			"bucketLimitReached": "Sarakkeen raja on saavutettu. Poista tehtäviä tai aseta suurempi raja lisätäksesi uusia tehtäviä."
+		},
+		"pseudo": {
+			"favorites": {
+				"title": "Suosikit"
+			}
+		},
+		"webhooks": {
+			"targetUrl": "Kohde URL",
+			"events": "Tapahtumat",
+			"mustSelectEvents": "Sinun on valittava ainakin yksi tapahtuma."
+		},
+		"views": {
+			"header": "Muokkaa näkymiä",
+			"title": "Otsikko",
+			"actions": "Toiminnot",
+			"filter": "Suodatin",
+			"create": "Luo näkymä",
+			"createSuccess": "Näkymä luotiin onnistuneesti.",
+			"titleRequired": "Ole hyvä ja anna otsikko.",
+			"delete": "Poista näkymä",
+			"deleteText": "Oletko varma, että haluat poistaa tämän näkymän? Sitä ei voi enää käyttää tämän projektin tehtävien näyttämiseen. Tämä toiminto ei poista tehtäviä. Tätä toimintoa ei voi perua!",
+			"deleteSuccess": "Näkymä poistettiin onnistuneesti.",
+			"onlyAdminsCanEdit": "Vain projektin ylläpitäjät voivat muokata näkymiä.",
+			"updateSuccess": "Näkymä päivitettiin onnistuneesti."
+		}
+	},
+	"filters": {
+		"title": "Suodattimet",
+		"clear": "Tyhjennä Suodattimet",
+		"showResults": "Näytä tulokset",
+		"noResults": "Ei tuloksia",
+		"fromView": "Nykyisessä näkymässä on myös suodatin käytössä:",
+		"fromViewBoth": "Sitä käytetään yhdessä sen kanssa, mitä syötät tähän.",
+		"attributes": {
+			"title": "Otsikko",
+			"titlePlaceholder": "Tallennetun suodattimen otsikko menee tähän…",
+			"description": "Kuvaus",
+			"descriptionPlaceholder": "Anna kuvaus tälle suodattimelle, paina '/' saadaksesi lisää vaihtoehtoja…",
+			"includeNulls": "Sisällytä tehtävät, joille ei ole asetettu arvoa"
+		},
+		"create": {
+			"title": "Uusi Tallennettu Suodatin",
+			"description": "Tallennettu suodatin on virtuaalinen projekti, joka muodostetaan suodattimia hyödyntäen joka kerta kun sitä kutsutaan.",
+			"action": "Luo tallennettu suodatin",
+			"titleRequired": "Ole hyvä ja anna suodattimelle otsikko."
+		},
+		"delete": {
+			"header": "Poista tämä tallennettu suodatin",
+			"text": "Haluatko varmasti poistaa tämä tallennetun suodattimen?",
+			"success": "Suodatin poistettiin onnistuneesti."
+		},
+		"edit": {
+			"title": "Muokkaa Tätä Tallennettua Suodinta",
+			"success": "Suodatin tallennettiin onnistuneesti."
+		},
+		"query": {
+			"placeholder": "Kirjoita haku tai suodatinkysely…",
+			"help": {
+				"intro": "Suodattaaksesi tehtäviä voit käyttää SQL kieltä muistuttavaa syntaksia. Saatavilla olevat kentät suodatukseen ovat: ",
+				"link": "Miten tämä toimii?",
+				"canUseDatemath": "Voit käyttää päivämäärä laskentaa asettaaksesi suhteellisia päivämääriä. Klikkaa päivämäärä arvoa kyselyssä saadaksesi lisätietoa.",
+				"fields": {
+					"done": "Onko tehtävä valmis vai ei",
+					"priority": "Tehtävän prioriteettitaso (1-5)",
+					"percentDone": "Tehtävän edistymis prosentti (0-100)",
+					"dueDate": "Tehtävän eräpäivä",
+					"startDate": "Tehtävän aloituspäivä",
+					"endDate": "Tehtävän päättymispäivä",
+					"doneAt": "Tehtävän valmistumishetki",
+					"assignees": "Osoitettu käyttäjlle",
+					"labels": "Tehtävään liitetyt tunnisteet",
+					"project": "Tehtävän projekti (käytettävissä ainoastaan tallennetuilla suodattimilla, ei projekti tasolla)",
+					"created": "Tehtävän luontiaika",
+					"updated": "Tehtävän edellinen muokkaushetki"
+				},
+				"operators": {
+					"intro": "Suodattamiseen käytettävissä olevat operaattorit sisältävät:",
+					"notEqual": "Erisuuri kuin",
+					"equal": "Yhtä suuri kuin",
+					"greaterThan": "Suurempi kuin",
+					"greaterThanOrEqual": "Suurempi tai yhtä suuri kuin",
+					"lessThan": "Pienempi kuin",
+					"lessThanOrEqual": "Pienempi tai yhtä suuri kuin"
+				},
+				"logicalOperators": {
+					"intro": "Yhdistääksesi usean ehdon, voit käyttää seuraavia loogisia operaattoreja:",
+					"and": "JA operaattori täyttyy, jos kaikki ehdot ovat tosi",
+					"or": "TAI operaattori täyttyy, jos yksikin ehto on tosi"
+				},
+				"examples": {
+					"intro": "Tässä on muutama esimerkki suodatin kyselyistä:",
+					"priorityEqual": "Löytää tehtävät joiden prioriteetti taso on 4",
+					"dueDatePast": "Löytää tehtävät joiden eräpäivä on menneisyydessä",
+					"undoneHighPriority": "Löytää keskeneräiset tehtävät joiden prioriteetti taso on 3 tai korkeampi",
+					"assigneesIn": "Löytää tehtävät jotka on osoitettu joko käyttäjälle \"user1\" tai käyttäjälle \"user2\"",
+					"priorityOneOrTwoPastDue": "Löytää tehtävät joiden prioriteetti taso on 1 ta 2 ja joiden eräpäivä on menneisyydessä"
+				}
+			}
+		}
+	},
+	"migrate": {
+		"title": "Tuo muista palveluista",
+		"titleService": "Tuo {name} tietosi Vikunjaan",
+		"description": "Kilkkaa kolmannen osapuolen logoa alta aloittaaksesi.",
+		"getStarted": "Aloitetaan",
+		"inProgress": "Tuonti käynnissä…",
+		"alreadyMigrated2": "Uudelleen tuonti on mahdollista, mutta saattaa luoda kaksoiskappaleita. Oletko varma?",
+		"confirm": "Olen varma, aloitetaan migraatio!",
+		"upload": "Lataa tiedosto"
+	},
+	"label": {
+		"title": "Tunnisteet",
+		"manage": "Hallitse tunnisteita",
+		"description": "Klikkaa tunnistetta muokataksesi sitä. Voit muokata kaikkia luomiasi tunnisteita ja käyttää käyttää kaikkia tunnisteita jotka on liitetty tehtäviin minkä projekteille sinulla on pääsy.",
+		"newCTA": "Sinulla ei tällä hetkellä ole yhtään tunnistetta.",
+		"create": {
+			"header": "Uusi tunniste",
+			"title": "Luo tunniste",
+			"titleRequired": "Ole hyvä ja anna otsikko.",
+			"success": "Tunniste luotiin onnistuneesti."
+		},
+		"edit": {
+			"header": "Muokkaa Tunnistetta",
+			"success": "Tunniste päivitettiin onnistuneesti."
+		},
+		"deleteSuccess": "Tunniste poistettiin onnistuneesti.",
+		"attributes": {
+			"title": "Otsikko",
+			"titlePlaceholder": "Tunnisteen otsikko menee tähän…",
+			"description": "Kuvaus",
+			"color": "Väri"
+		}
+	},
+	"sharing": {
+		"authenticating": "Todennetaan…",
+		"passwordRequired": "Tämä jaettu projekti vaatii salasanan. Syötä se alle:",
+		"error": "Tapahtui virhe.",
+		"invalidPassword": "Salasana on virheellinen."
+	},
+	"navigation": {
+		"overview": "Yleisnäkymä",
+		"upcoming": "Tulevat",
+		"settings": "Asetukset",
+		"privacy": "Tietosuojakäytäntö"
+	},
+	"misc": {
+		"loading": "Ladataan…",
+		"save": "Tallenna",
+		"delete": "Poista",
+		"confirm": "Vahvista",
+		"cancel": "Peruuta",
+		"copy": "Kopioi leikepöydälle",
+		"copyError": "Leikepöydälle kopiointi epäonnistui",
+		"searchPlaceholder": "Kirjoita hakeaksesi…",
+		"previous": "Edellinen",
+		"next": "Seuraava",
+		"poweredBy": "Powered by Vikunja",
+		"create": "Luo",
+		"doit": "Tee se!",
+		"saving": "Tallennetaan…",
+		"saved": "Tallennettu!",
+		"default": "Oletus",
+		"close": "Sulje",
+		"download": "Lataa",
+		"showMenu": "Näytä valikko",
+		"hideMenu": "Piilota valikko",
+		"forExample": "Esimerkiksi:",
+		"welcomeBack": "Tervetuloa takaisin!",
+		"custom": "Mukautettu",
+		"created": "Luontiaika",
+		"createdBy": "Luoja {0}",
+		"actions": "Toiminnot",
+		"cannotBeUndone": "Tätä ei voi perua!",
+		"avatarOfUser": "{user}n profiilikuva"
+	},
+	"input": {
+		"resetColor": "Palauta Väri",
+		"datepicker": {
+			"today": "Tänään",
+			"tomorrow": "Huomenna",
+			"chooseDate": "Valitse päivämäärä"
+		},
+		"editor": {
+			"edit": "Muokkaa",
+			"heading1": "Otsikko 1",
+			"heading1Tooltip": "Suuri osio-otsikko.",
+			"heading2": "Otsikko 2",
+			"heading2Tooltip": "Keskikokoinen osio-otsikko.",
+			"heading3": "Otsikko 3",
+			"heading3Tooltip": "Pieni osio-otsikko.",
+			"bold": "Lihavoitu",
+			"italic": "Kursivoitu",
+			"strikethrough": "Yliviivattu",
+			"underline": "Alleviivattu",
+			"code": "Koodi",
+			"codeTooltip": "Luo koodi blokki.",
+			"quote": "Lainaus",
+			"quoteTooltip": "Luo lainaus.",
+			"bulletListTooltip": "Luo yksinkertainen bullet-lista.",
+			"orderedListTooltip": "Luo numeroitu lista.",
+			"image": "Kuva",
+			"imageTooltip": "Lataa kuva tietokoneeltasi.",
+			"horizontalRule": "Vaakaviiva",
+			"horizontalRuleTooltip": "Jaa osio.",
+			"text": "Teksti",
+			"textTooltip": "Kirjoita vain tekstiä.",
+			"undo": "Kumoa",
+			"redo": "Tee uudelleen",
+			"placeholder": "Kirjoita tekstiä tai paina '/' nähdäksesi lisää vaihtoehtoja…",
+			"table": {
+				"title": "Taulukko",
+				"insert": "Lisää taulukko",
+				"addColumnBefore": "Lisää sarake ennen",
+				"addColumnAfter": "Lisää sarake jälkeen",
+				"deleteColumn": "Poista sarake",
+				"addRowBefore": "Lisää rivi ennen",
+				"addRowAfter": "Lisää rivi jälkeen",
+				"deleteRow": "Poista rivi",
+				"deleteTable": "Poista taulukko",
+				"mergeCells": "Yhdistä solut",
+				"splitCell": "Jaa solu",
+				"mergeOrSplit": "Yhdistä tai jaa"
+			}
+		},
+		"multiselect": {
+			"createPlaceholder": "Luo",
+			"selectPlaceholder": "Klikkaa tai paina enter valitaksesi"
+		},
+		"datepickerRange": {
+			"to": "Mihin",
+			"from": "Mistä",
+			"values": {
+				"now": "Nyt",
+				"startOfToday": "Tämän päivän alku",
+				"endOfToday": "Tämän päivän loppu",
+				"beginningOflastWeek": "Viime viikon alku",
+				"endOfLastWeek": "Viime viikon loppu",
+				"beginningOfThisWeek": "Tämän viikon alku",
+				"endOfThisWeek": "Tämän viikon loppu",
+				"startOfNextWeek": "Ensi viikon alku",
+				"endOfNextWeek": "Ensi viikon loppu",
+				"in7Days": "7 päivän päästä",
+				"beginningOfLastMonth": "Viime kuun alku",
+				"endOfLastMonth": "Viime kuun loppu",
+				"startOfThisMonth": "Tämän kuun alku",
+				"endOfThisMonth": "Tämän kuun loppu",
+				"startOfNextMonth": "Ensi kuun alku",
+				"endOfNextMonth": "Ensi kuun loppu",
+				"in30Days": "30 päivän päästä",
+				"startOfThisYear": "Tämän vuoden alku",
+				"endOfThisYear": "Tämän vuoden loppu"
+			}
+		},
+		"datemathHelp": {
+			"canuse": "Voit käyttää päivämäärä laskentaa suodattaaksesi suhteellisia päivämääriä.",
+			"learnhow": "Katso kuinka se toimii",
+			"title": "Päivämäärä Laskenta",
+			"intro": "Määrittele suhteellisia päivämääriä, jotka Vikunja laskee suodatinta käyttäessä.",
+			"similar": "Nämä lausekkeet ovat samankaltaisia kuin {0} ja {1} käyttävät.",
+			"add1Day": "Lisää yksi päivä",
+			"minus1Day": "Vähennä yksi päivä",
+			"roundDay": "Pyöristä alas lähimpään päivään",
+			"supportedUnits": "Tuetut aikayksiköt",
+			"units": {
+				"seconds": "Sekunti",
+				"minutes": "Minuutti",
+				"hours": "Tunti",
+				"days": "Päivä",
+				"weeks": "Viikko",
+				"months": "Kuukausi",
+				"years": "Vuosi"
+			},
+			"examples": {
+				"now": "Juuri nyt",
+				"in24h": "24 tunnin päästä",
+				"today": "Tänään klo 00:00",
+				"beginningOfThisWeek": "Tämän viikon alussa klo 00:00",
+				"endOfThisWeek": "Tämän viikon lopussa",
+				"in30Days": "30 päivän päästä"
+			}
+		}
+	},
+	"task": {
+		"new": "Luo tehtävä",
+		"createSuccess": "Tehtävä luotiin onnistuneesti.",
+		"addReminder": "Lisää muistutus…",
+		"doneSuccess": "Tehtävä merkittiin onnistuneesti valmiiksi.",
+		"undoneSuccess": "Tehtävä merkittiin onnistuneesti keskeneräiseksi.",
+		"undo": "Kumoa",
+		"checklistTotal": "{checked} tehtävää {total} tehtävästä",
+		"checklistAllDone": "{total} tehtävää",
+		"show": {
+			"titleCurrent": "Nykyiset Tehtävät",
+			"overdue": "Näytä erääntyneet tehtävät",
+			"fromuntil": "Tehtävät väliltä {from} - {until}",
+			"select": "Valitse päivämäärä väli",
+			"noTasks": "Ei mitään tehtävää — Mukavaa päivää!"
+		},
+		"detail": {
+			"chooseDueDate": "Klikkaa tästä asettaaksesi eräpäivän",
+			"chooseStartDate": "Klikkaa tästä asettaaksesi aloituspäivän",
+			"chooseEndDate": "Klikkaa tästä asettaaksesi päättymispäivän",
+			"move": "Siirrä tehtävä toiseen projektiin",
+			"done": "Merkitse tehtävä valmiiksi!",
+			"undone": "Merkitse tehtävä keskeneräiseksi",
+			"created": "Luotu {0} käyttäjältä {1}",
+			"updated": "Päivitetty {0}",
+			"updateSuccess": "Tehtävä tallennettiin onnistuneesti.",
+			"deleteSuccess": "Tehtävä poistettiin onnistuneesti.",
+			"belongsToProject": "Tämä tehtävä kuuluu '{project}' projektiin",
+			"due": "Erääntyy {at}",
+			"organization": "Organisaatio",
+			"management": "Hallinta",
+			"dateAndTime": "Päivä ja Aika",
+			"delete": {
+				"header": "Poista tämä tehtävä",
+				"text1": "Haluatko varmasti poistaa tämän tehtävän?",
+				"text2": "Tämä poistaa myös kaikki tähän tehtävään liittyvät liitteet, muistutukset ja relaatiot eikä sitä voi peruuttaa!"
+			},
+			"actions": {
+				"assign": "Osoita käyttäjälle",
+				"label": "Lisää Tunnisteita",
+				"priority": "Aseta Priotiteetti",
+				"dueDate": "Aseta Eräpäivä",
+				"startDate": "Aseta Aloituspäivä",
+				"endDate": "Aseta Päättymispäivä",
+				"reminders": "Aseta Muistutuksia",
+				"repeatAfter": "Aseta Toistoväli",
+				"percentDone": "Aseta Edistymis Prosentti",
+				"attachments": "Lisää Liitteitä",
+				"relatedTasks": "Lisää Relaatio",
+				"moveProject": "Siirrä",
+				"color": "Aseta Väri",
+				"delete": "Poista",
+				"favorite": "Lisää Suosikkeihin",
+				"unfavorite": "Poista Suosikeista"
+			}
+		},
+		"attributes": {
+			"assignees": "Osoita käyttäjille",
+			"color": "Väri",
+			"created": "Luontiaika",
+			"createdBy": "Luoja",
+			"description": "Kuvaus",
+			"done": "Valmis",
+			"dueDate": "Eräpäivä",
+			"endDate": "Päättymispäivä",
+			"labels": "Tunnisteet",
+			"percentDone": "Edistyminen",
+			"priority": "Prioriteetti",
+			"relatedTasks": "Liittyvät Tehtävät",
+			"reminders": "Muistutukset",
+			"repeat": "Toista",
+			"startDate": "Aloituspäivä",
+			"title": "Otsikko",
+			"updated": "Päivitetty",
+			"doneAt": "Valmistumisaika"
+		},
+		"subscription": {
+			"subscribedProject": "Olet tällä hetkellä tilannut ilmoitukset tästä projektista ja saat ilmoitukset muutoksista.",
+			"notSubscribedProject": "Et ole tilannut tätä projektia etkä saa ilmoituksia muutoksista.",
+			"subscribedTask": "Olet tällä hetkellä tilannut ilmoitukset tästä tehtäväst ja saat ilmoitukset muutoksista.",
+			"notSubscribedTask": "Et ole tilannut ilmoituksia tästä tehtävää etkä saa ilmoituksia muutoksista.",
+			"subscribe": "Tilaa ilmotukset",
+			"unsubscribe": "Peruuta tilaus",
+			"subscribeSuccessProject": "Olet nyt tilannut tämän projektin ilmoitukset",
+			"unsubscribeSuccessProject": "Olet perunut tämän projektin ilmoitusten tilauksen",
+			"subscribeSuccessTask": "Olet nyt tilannut tämän tehtävän ilmoitukset",
+			"unsubscribeSuccessTask": "Olet perunut tämän tehtävän ilmoitusten tilauksen"
+		},
+		"attachment": {
+			"title": "Liitteet",
+			"createdBy": "luotu {0} käyttäjältä {1}",
+			"downloadTooltip": "Lataa tämä liite",
+			"upload": "Lataa liite",
+			"drop": "Pudota siirrettävät tiedostot tähän",
+			"delete": "Poista liite",
+			"deleteTooltip": "Poista tämä liite",
+			"deleteText1": "Oletko varma, että haluat poistaa liitteen {filename}?"
+		},
+		"comment": {
+			"title": "Kommentit",
+			"loading": "Ladataan kommentteja…",
+			"creating": "Luodaan kommenttia…",
+			"placeholder": "Lisää kommentti, paina '/' saadaksesi lisää vaihtoehtoja…",
+			"comment": "Kommentti",
+			"delete": "Poista tämä kommentti",
+			"deleteText1": "Haluatko varmasti poistaa tämän kommentin?",
+			"deleteSuccess": "Kommentti poistettiin onnistuneesti.",
+			"addedSuccess": "Kommentti lisättiin onnistuneesti.",
+			"permalink": "Kopioi pysyvä linkki tähän kommenttiin"
+		},
+		"deferDueDate": {
+			"title": "Siirrä eräpäivää",
+			"1day": "1 päivä",
+			"3days": "3 päivää",
+			"1week": "1 viikko"
+		},
+		"description": {
+			"placeholder": "Syötä kuvaus, paina '/' saadaksesi lisää vaihtoehtoja…"
+		},
+		"assignee": {
+			"placeholder": "Kirjoita osoittaaksesi käyttäjälle…",
+			"selectPlaceholder": "Osoita tälle käyttäjälle",
+			"assignSuccess": "Osoitettiin käyttäjälle onnistuneesti.",
+			"unassignSuccess": "Poistettiin käyttäjälle osoitus onnistuneesti."
+		},
+		"label": {
+			"placeholder": "Kirjoita lisätäksesi tunnisteen…",
+			"createPlaceholder": "Lisää tämä uutena tunnisteena",
+			"addSuccess": "Tunniste lisättiin onnistuneesti.",
+			"removeSuccess": "Tunniste poistettiin onnistuneesti.",
+			"addCreateSuccess": "Tunniste luotiin ja lisättiin onnistuneesti.",
+			"delete": {
+				"header": "Poista tämä tunniste",
+				"text1": "Haluatko varmasti poistaa tämän tunnisteen?",
+				"text2": "Tämä poistaa sen kaikista tehtävistä, eikä sitä voida palauttaa."
+			}
+		},
+		"priority": {
+			"low": "Alhainen",
+			"medium": "Keskitaso",
+			"high": "Korkea",
+			"urgent": "Kiireellinen",
+			"doNow": "TEE NYT"
+		},
+		"relation": {
+			"add": "Lisää Uusi Tehtävä Relaatio",
+			"new": "Uusi Tehtävä Relaatio",
+			"delete": "Poista Tehtävä Relaatio",
+			"deleteText1": "Haluatko varmasti poistaa tämän tehtävä relaation?",
+			"select": "Valitse relaation tyyppi",
+			"kinds": {
+				"subtask": "Alitehtävä | Alitehtävät",
+				"parenttask": "Ylätason tehtävä | Ylätason tehtävät",
+				"related": "Liittyvä Tehtävä | Liittyvät Tehtävät",
+				"blocking": "Estää | Estävät",
+				"precedes": "Edeltää | Edeltävät",
+				"follows": "Seuraa | Seuraavat"
+			}
+		},
+		"reminder": {
+			"beforeShort": "ennen",
+			"afterShort": "jälkeen",
+			"custom": "Mukautettu",
+			"dateAndTime": "Päivä ja Aika"
+		},
+		"repeat": {
+			"everyDay": "Joka Päivä",
+			"everyWeek": "Joka Viikko",
+			"every30d": "30 päivän välein",
+			"mode": "Toistotila",
+			"monthly": "Kuukausittain",
+			"fromCurrentDate": "Valmistumispäivästä alkaen",
+			"each": "Väli",
+			"specifyAmount": "Anna määrä…",
+			"hours": "Tuntia",
+			"days": "Päivää",
+			"weeks": "Viikkoa",
+			"invalidAmount": "Ole hyvä ja syötä suurempi arvo kuin 0."
+		},
+		"quickAddMagic": {
+			"priority2": "Mitä korkeampi numero, sitä suurempi prioriteetti.",
+			"assignees": "Osoittaaksesi tehtävän suoraan käyttäjälle lisää käyttäjänimi etuliitteellä {prefix}.",
+			"dateAndTime": "Päivä ja Aika",
+			"date": "Voit käyttää päivämääriä seuraavissa muodoissa:",
+			"repeats": "Toistuvat tehtävät",
+			"repeatsDescription": "Tehdäksesi tehtäväst toistuvan, lisää vain '{suffix}' pääte tekstiin. Määrän pitää olla numero ja se voidaan jättää väliin käyttämällä tyyppiä (katso esimerkit)."
+		}
+	},
+	"team": {
+		"title": "Tiimit",
+		"noTeams": "Et ole tällä hetkellä missään tiimissä.",
+		"create": {
+			"title": "Luo tiimi",
+			"success": "Tiimi luotiin onnistuneesti."
+		},
+		"edit": {
+			"title": "Muokkaa Tiimiä \"{team}\"",
+			"members": "Tiimin Jäsenet",
+			"search": "Kirjoita hakeaksesi käyttäjää…",
+			"addUser": "Lisää tiimiin",
+			"makeMember": "Tee Jäseneksi",
+			"makeAdmin": "Tee Ylläpitäjäksi",
+			"success": "Tiimi päivitettiin onnistuneesti.",
+			"mustSelectUser": "Ole hyvä ja valitse käyttäjä.",
+			"delete": {
+				"header": "Poista tiimi",
+				"text1": "Haluatko varmasti poistaa tämän tiiimin ja kaikki sen jäsenet?",
+				"success": "Tiimi poistettiin onnistuneesti."
+			},
+			"deleteUser": {
+				"header": "Poista käyttäjä tiimistä",
+				"text1": "Haluatko varmasti poistaa tämän käyttäjän tiimistä?"
+			},
+			"leave": {
+				"title": "Poistu tiimistä",
+				"text1": "Haluatko varmasti poistua tästä tiimistä?",
+				"success": "Olet poistunut onnistuneesti tiimistä."
+			}
+		},
+		"attributes": {
+			"name": "Tiimin Nimi",
+			"namePlaceholder": "Tiimin nimi menee tähän...",
+			"nameRequired": "Ole hyvä ja anna nimi.",
+			"description": "Kuvaus",
+			"descriptionPlaceholder": "Kuvaile tiimiä tässä, paina '/' saadaksesi lisää vaihtoehtoja...",
+			"admin": "Ylläpitäjä",
+			"member": "Jäsen",
+			"isPublic": "Julkinen Tiimi"
+		}
+	},
+	"keyboardShortcuts": {
+		"title": "Pikanäppäimet",
+		"allPages": "Nämä pikanäppäimet toimivat kaikilla sivuilla.",
+		"currentPageOnly": "Nämä pikanäppäimet toimivat vain tällä sivulla.",
+		"somePagesOnly": "Nämä pikanäppäimet toimivat vain joillain sivulla.",
+		"task": {
+			"done": "Merkitse tehtävä valmiiksi / keskeneräiseksi",
+			"assign": "Osoita tämä tehtävä käyttäjälle",
+			"labels": "Lisää tunnisteita tähän tehtävään",
+			"dueDate": "Muuta tämän tehtävän eräpäivää",
+			"attachment": "Lisää liite tähän tehtävään",
+			"related": "Muokkaa tähän tehtävään liitettyjä tehtäviä",
+			"color": "Vaihda tämän tehtävän väriä",
+			"move": "Siirrä tehtävä toiseen projektiin",
+			"reminder": "Hallitse tämän tehtävän muistutuksia",
+			"delete": "Poista tämä tehtävä",
+			"priority": "Muuta tämän tehtävän prioriteettia",
+			"favorite": "Lisää / poista tehtävä suosikeista",
+			"save": "Tallenna nykyinen tehtävä"
+		},
+		"project": {
+			"title": "Projekti Näkymät"
+		},
+		"navigation": {
+			"overview": "Siirry yleisnäkymään",
+			"upcoming": "Siirry tuleviin tehtäviin",
+			"labels": "Siirry tunnisteisiin",
+			"teams": "Siirry tiimeihin",
+			"projects": "Siirry projekteihin"
+		}
+	},
+	"menu": {
+		"edit": "Muokkaa",
+		"archive": "Arkistoi",
+		"duplicate": "Monista",
+		"delete": "Poista",
+		"unarchive": "Poista arkistosta",
+		"setBackground": "Taustakuvan asetukset",
+		"share": "Jaa",
+		"createProject": "Luo projekti",
+		"cantArchiveIsDefault": "Et voi arkistoida tätä, koska se on oletusprojektisi.",
+		"cantDeleteIsDefault": "Et voi poistaa tätä, koska se on oletusprojektisi."
+	},
+	"apiConfig": {
+		"urlPlaceholder": "esim. https://localhost:3456",
+		"change": "muuta"
+	},
+	"loadingError": {
+		"tryAgain": "yritä uudelleen",
+		"contact": "ota yhteyttä"
+	},
+	"notification": {
+		"title": "Ilmoitukset",
+		"none": "Sinulla ei ole ilmoituksia. Mukavaa päivää!",
+		"markAllRead": "Merkitse kaikki ilmoitukset luetuiksi",
+		"markAllReadSuccess": "Kaikki ilmoitukset merkittiin onnistuneesti luetuiksi."
+	},
+	"quickActions": {
+		"commands": "Komennot",
+		"placeholder": "Kirjoita komento tai hae…",
+		"tasks": "Tehtävät",
+		"projects": "Projektit",
+		"teams": "Tiimit",
+		"labels": "Tunnisteet",
+		"newProject": "Syötä uuden projektin otsikko…",
+		"newTask": "Syötä uuden tehtävän otsikko…",
+		"newTeam": "Anna uuden tiimin nimi…",
+		"createTask": "Luo tehtävä nykyiseen projektiin ({title})",
+		"createProject": "Luo projekti",
+		"cmds": {
+			"newTask": "Uusi tehtävä",
+			"newProject": "Uusi projekti",
+			"newTeam": "Uusi tiimi"
+		}
+	},
+	"reaction": {
+		"reactedWith": "{user} reagoi {value}",
+		"reactedWithAnd": "{users} ja {lastUser} reagoivat {value}",
+		"reactedWithAndMany": "{users} ja {num} muuta reagoivat {value}",
+		"add": "Lisää reaktiosi"
+	},
+	"error": {
+		"1001": "Tällä käyttäjänimellä löytyy jo käyttäjä.",
+		"1002": "Tällä sähköpostiosoitteella löytyy jo käyttäjä.",
+		"1005": "Käyttäjää ei ole olemassa.",
+		"1011": "Väärä käyttäjänimi tai salasana.",
+		"1013": "Uusi salasana on tyhjä.",
+		"1014": "Vanha salasana on tyhjä.",
+		"1022": "Käyttäjätunnus ei saa sisältää välilyöntejä.",
+		"1025": "Aikavyöhyke '{timezone}' on virheellinen. Ole hyvä ja valitse kelvollinen aikavyöhyke listalta.",
+		"2003": "Aikavyöhyke '{timezone}' on virheellinen.",
+		"3001": "Projektia ei ole olemassa.",
+		"3005": "Projektin otsikko ei voi olla tyhjä.",
+		"3007": "Tällä tunnisteella löytyy jo projekti.",
+		"4001": "Tehtävän otsikko ei voi olla tyhjä.",
+		"4002": "Tehtävää ei ole olemassa.",
+		"4021": "Tehtävä on jo osoitettu tälle käyttäjälle.",
+		"6001": "Tiimin nimi ei voi olla tyhjä.",
+		"6002": "Tiimiä ei ole olemassa.",
+		"6004": "Tiimillä on jo pääsy kyseiseen projektiin.",
+		"6005": "Käyttäjä on jo kyseisen tiimin jäsen.",
+		"6006": "Tiimin viimeistä jäsentä ei voi poistaa.",
+		"6007": "Tiimillä ei ole pääsyä projektiin suorittaakseen tuota toimintoa.",
+		"7002": "Käyttäjällä on jo pääsy kyseiseen projektiin.",
+		"7003": "Sinulla ei ole pääsyä kyseiseen projektiin.",
+		"8001": "Tämä tunniste on jo olemassa tuossa tehtävässä.",
+		"8002": "Tunnistetta ei ole olemassa.",
+		"8003": "Sinulla ei ole pääsyä tähän tunnisteeseen.",
+		"11001": "Tallennettua suodatinta ei ole olemassa.",
+		"14002": "Ryhmän {group} oikeus {permission} on virheellinen.",
+		"error": "Virhe",
+		"success": "Onnistui",
+		"0001": "Sinulla ei ole lupaa tehdä tuota."
+	},
+	"about": {
+		"title": "Tietoa",
+		"version": "Versio: {version}"
+	},
+	"time": {
+		"units": {
+			"seconds": "sekunti|sekuntia",
+			"minutes": "minuutti|minuuttia",
+			"hours": "tunti|tuntia",
+			"days": "päivä|päivää",
+			"weeks": "viikko|viikkoa",
+			"years": "vuosi|vuotta"
+		}
+	}
+}

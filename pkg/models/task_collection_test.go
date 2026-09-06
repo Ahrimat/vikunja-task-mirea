@@ -1,0 +1,2564 @@
+// Vikunja is a to-do list application to facilitate your life.
+// Copyright 2018-present Vikunja and contributors. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+package models
+
+import (
+	"sort"
+	"testing"
+	"time"
+
+	"code.vikunja.io/api/pkg/config"
+	"code.vikunja.io/api/pkg/db"
+	"code.vikunja.io/api/pkg/files"
+	"code.vikunja.io/api/pkg/user"
+	"code.vikunja.io/api/pkg/web"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
+	"gopkg.in/d4l3k/messagediff.v1"
+)
+
+// To only run a selected tests: ^\QTestTaskCollection_ReadAll\E$/^\QReadAll_Tasks_with_range\E$
+
+func TestTaskCollection_ReadAll(t *testing.T) {
+	// Dummy users
+	user1 := &user.User{
+		ID:                           1,
+		Username:                     "user1",
+		Password:                     "$2a$04$X4aRMEt0ytgPwMIgv36cI..7X9.nhY/.tYwxpqSi0ykRHx2CwQ0S6",
+		Issuer:                       "local",
+		EmailRemindersEnabled:        true,
+		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
+		Created:                      testCreatedTime,
+		Updated:                      testUpdatedTime,
+		ExportFileID:                 1,
+	}
+	user2 := &user.User{
+		ID:                           2,
+		Username:                     "user2",
+		Password:                     "$2a$04$X4aRMEt0ytgPwMIgv36cI..7X9.nhY/.tYwxpqSi0ykRHx2CwQ0S6",
+		Issuer:                       "local",
+		EmailRemindersEnabled:        true,
+		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
+		DefaultProjectID:             4,
+		Created:                      testCreatedTime,
+		Updated:                      testUpdatedTime,
+	}
+	user6 := &user.User{
+		ID:                           6,
+		Username:                     "user6",
+		Password:                     "$2a$04$X4aRMEt0ytgPwMIgv36cI..7X9.nhY/.tYwxpqSi0ykRHx2CwQ0S6",
+		Issuer:                       "local",
+		EmailRemindersEnabled:        true,
+		OverdueTasksRemindersEnabled: true,
+		OverdueTasksRemindersTime:    "09:00",
+		Created:                      testCreatedTime,
+		Updated:                      testUpdatedTime,
+	}
+	linkShareUser2 := &user.User{
+		ID:       -2,
+		Name:     "Link Share",
+		Username: "link-share-2",
+		Created:  testCreatedTime,
+		Updated:  testUpdatedTime,
+	}
+
+	loc := config.GetTimeZone()
+
+	label4 := &Label{
+		ID:          4,
+		Title:       "Label #4 - visible via other task",
+		CreatedByID: 2,
+		CreatedBy:   user2,
+		Created:     testCreatedTime,
+		Updated:     testUpdatedTime,
+	}
+	label10 := &Label{
+		ID:          10,
+		Title:       "Label #10 - attached in child project only",
+		CreatedByID: 6,
+		CreatedBy:   user6,
+		Created:     testCreatedTime,
+		Updated:     testUpdatedTime,
+	}
+
+	// We use individual variables for the tasks here to be able to rearrange or remove ones more easily
+	task1 := &Task{
+		ID:          1,
+		Title:       "task #1",
+		Description: "Lorem Ipsum",
+		Identifier:  "TEST1-1",
+		Index:       1,
+		CreatedByID: 1,
+		CreatedBy:   user1,
+		ProjectID:   1,
+		IsFavorite:  true,
+		Labels: []*Label{
+			label4,
+		},
+		RelatedTasks: map[RelationKind][]*Task{
+			RelationKindSubtask: {
+				{
+					ID:          29,
+					Title:       "task #29 with parent task (1)",
+					Index:       14,
+					CreatedByID: 1,
+					ProjectID:   1,
+					Created:     time.Unix(1543626724, 0).In(loc),
+					Updated:     time.Unix(1543626724, 0).In(loc),
+				},
+			},
+		},
+		Attachments: []*TaskAttachment{
+			{
+				ID:          1,
+				TaskID:      1,
+				FileID:      1,
+				CreatedByID: 1,
+				CreatedBy:   user1,
+				Created:     testCreatedTime,
+				File: &files.File{
+					ID:          1,
+					Name:        "test",
+					Size:        100,
+					Created:     time.Unix(1570998791, 0).In(loc),
+					CreatedByID: 1,
+				},
+			},
+			{
+				ID:          2,
+				TaskID:      1,
+				FileID:      9999,
+				CreatedByID: 1,
+				CreatedBy:   user1,
+				Created:     testCreatedTime,
+			},
+			{
+				ID:          3,
+				TaskID:      1,
+				FileID:      1,
+				CreatedByID: -2,
+				CreatedBy:   linkShareUser2,
+				Created:     testCreatedTime,
+				File: &files.File{
+					ID:          1,
+					Name:        "test",
+					Size:        100,
+					Created:     time.Unix(1570998791, 0).In(loc),
+					CreatedByID: 1,
+				},
+			},
+		},
+		Created: time.Unix(1543626724, 0).In(loc),
+		Updated: time.Unix(1543626724, 0).In(loc),
+	}
+	var task1WithReaction = &Task{}
+	*task1WithReaction = *task1
+	task1WithReaction.Reactions = ReactionMap{
+		"👋": []*user.User{user1},
+	}
+	task2 := &Task{
+		ID:          2,
+		Title:       "task #2 done",
+		Identifier:  "TEST1-2",
+		Index:       2,
+		Done:        true,
+		CreatedByID: 1,
+		CreatedBy:   user1,
+		ProjectID:   1,
+		Labels: []*Label{
+			label4,
+		},
+		RelatedTasks: map[RelationKind][]*Task{},
+		Reminders: []*TaskReminder{
+			{
+				ID:       3,
+				TaskID:   2,
+				Reminder: time.Unix(1543626824, 0).In(loc),
+				Created:  time.Unix(1543626724, 0).In(loc),
+			},
+			{
+				ID:       5,
+				TaskID:   2,
+				Reminder: time.Date(2019, 6, 1, 12, 0, 0, 0, loc),
+				Created:  time.Unix(1543626724, 0).In(loc),
+			},
+		},
+		Created: time.Unix(1543626724, 0).In(loc),
+		Updated: time.Unix(1543626724, 0).In(loc),
+	}
+	task3 := &Task{
+		ID:           3,
+		Title:        "task #3 high prio",
+		Identifier:   "TEST1-3",
+		Index:        3,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+		Priority:     100,
+	}
+	task4 := &Task{
+		ID:           4,
+		Title:        "task #4 low prio",
+		Identifier:   "TEST1-4",
+		Index:        4,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+		Priority:     1,
+	}
+	task5 := &Task{
+		ID:           5,
+		Title:        "task #5 higher due date",
+		Identifier:   "TEST1-5",
+		Index:        5,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+		DueDate:      time.Unix(1543636724, 0).In(loc),
+	}
+	task6 := &Task{
+		ID:           6,
+		Title:        "task #6 lower due date",
+		Description:  "This has something unique",
+		Identifier:   "TEST1-6",
+		Index:        6,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+		DueDate:      time.Unix(1543616724, 0).In(loc),
+	}
+	task7 := &Task{
+		ID:           7,
+		Title:        "task #7 with start date",
+		Identifier:   "TEST1-7",
+		Index:        7,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+		StartDate:    time.Unix(1544600000, 0).In(loc),
+	}
+	task8 := &Task{
+		ID:           8,
+		Title:        "task #8 with end date",
+		Identifier:   "TEST1-8",
+		Index:        8,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+		EndDate:      time.Unix(1544700000, 0).In(loc),
+	}
+	task9 := &Task{
+		ID:           9,
+		Title:        "task #9 with start and end date",
+		Identifier:   "TEST1-9",
+		Index:        9,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+		StartDate:    time.Unix(1544600000, 0).In(loc),
+		EndDate:      time.Unix(1544700000, 0).In(loc),
+	}
+	task10 := &Task{
+		ID:           10,
+		Title:        "task #10 basic",
+		Identifier:   "TEST1-10",
+		Index:        10,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task11 := &Task{
+		ID:           11,
+		Title:        "task #11 basic",
+		Identifier:   "TEST1-11",
+		Index:        11,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task12 := &Task{
+		ID:           12,
+		Title:        "task #12 basic",
+		Identifier:   "TEST1-12",
+		Index:        12,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task15 := &Task{
+		ID:           15,
+		Title:        "task #15",
+		Identifier:   "TEST6-1",
+		Index:        1,
+		CreatedByID:  6,
+		CreatedBy:    user6,
+		ProjectID:    6,
+		IsFavorite:   true,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task16 := &Task{
+		ID:           16,
+		Title:        "task #16",
+		Identifier:   "TEST7-1",
+		Index:        1,
+		CreatedByID:  6,
+		CreatedBy:    user6,
+		ProjectID:    7,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task17 := &Task{
+		ID:           17,
+		Title:        "task #17",
+		Identifier:   "TEST8-1",
+		Index:        1,
+		CreatedByID:  6,
+		CreatedBy:    user6,
+		ProjectID:    8,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task18 := &Task{
+		ID:           18,
+		Title:        "task #18",
+		Identifier:   "TEST9-1",
+		Index:        1,
+		CreatedByID:  6,
+		CreatedBy:    user6,
+		ProjectID:    9,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task19 := &Task{
+		ID:           19,
+		Title:        "task #19",
+		Identifier:   "TEST10-1",
+		Index:        1,
+		CreatedByID:  6,
+		CreatedBy:    user6,
+		ProjectID:    10,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task20 := &Task{
+		ID:           20,
+		Title:        "task #20",
+		Identifier:   "TEST11-1",
+		Index:        1,
+		CreatedByID:  6,
+		CreatedBy:    user6,
+		ProjectID:    11,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task21 := &Task{
+		ID:           21,
+		Title:        "task #21",
+		Identifier:   "#1",
+		Index:        1,
+		CreatedByID:  6,
+		CreatedBy:    user6,
+		ProjectID:    32, // parent project is shared to user 1 via direct share
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task22 := &Task{
+		ID:           22,
+		Title:        "task #22",
+		Identifier:   "#1",
+		Index:        1,
+		CreatedByID:  6,
+		CreatedBy:    user6,
+		ProjectID:    33,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task23 := &Task{
+		ID:           23,
+		Title:        "task #23",
+		Identifier:   "#1",
+		Index:        1,
+		CreatedByID:  6,
+		CreatedBy:    user6,
+		ProjectID:    34,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task24 := &Task{
+		ID:           24,
+		Title:        "task #24",
+		Identifier:   "TEST15-1",
+		Index:        1,
+		CreatedByID:  6,
+		CreatedBy:    user6,
+		ProjectID:    15, // parent project is shared to user 1 via team
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task25 := &Task{
+		ID:          25,
+		Title:       "task #25",
+		Identifier:  "TEST16-1",
+		Index:       1,
+		CreatedByID: 6,
+		CreatedBy:   user6,
+		ProjectID:   16,
+		Labels: []*Label{
+			label10,
+		},
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task26 := &Task{
+		ID:           26,
+		Title:        "task #26",
+		Identifier:   "TEST17-1",
+		Index:        1,
+		CreatedByID:  6,
+		CreatedBy:    user6,
+		ProjectID:    17,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task27 := &Task{
+		ID:          27,
+		Title:       "task #27 with reminders and start_date",
+		Identifier:  "TEST1-18",
+		Index:       18,
+		CreatedByID: 1,
+		CreatedBy:   user1,
+		Reminders: []*TaskReminder{
+			{
+				ID:       1,
+				TaskID:   27,
+				Reminder: time.Unix(1543626724, 0).In(loc),
+				Created:  time.Unix(1543626724, 0).In(loc),
+			},
+			{
+				ID:             2,
+				TaskID:         27,
+				Reminder:       time.Unix(1543626824, 0).In(loc),
+				Created:        time.Unix(1543626724, 0).In(loc),
+				RelativePeriod: -3600,
+				RelativeTo:     "start_date",
+			},
+		},
+		StartDate:    time.Unix(1543616724, 0).In(loc),
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task28 := &Task{
+		ID:           28,
+		Title:        "task #28 with repeat after, start_date, end_date and due_date",
+		Identifier:   "TEST1-13",
+		Index:        13,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		RepeatAfter:  3600,
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+		DueDate:      time.Unix(1543789524, 0).In(loc),
+		StartDate:    time.Unix(1543616724, 0).In(loc),
+		EndDate:      time.Unix(1544700000, 0).In(loc),
+	}
+	task29 := &Task{
+		ID:          29,
+		Title:       "task #29 with parent task (1)",
+		Identifier:  "TEST1-14",
+		Index:       14,
+		CreatedByID: 1,
+		CreatedBy:   user1,
+		ProjectID:   1,
+		RelatedTasks: map[RelationKind][]*Task{
+			RelationKindParenttask: {
+				{
+					ID:          1,
+					Title:       "task #1",
+					Description: "Lorem Ipsum",
+					Index:       1,
+					CreatedByID: 1,
+					ProjectID:   1,
+					IsFavorite:  true,
+					Created:     time.Unix(1543626724, 0).In(loc),
+					Updated:     time.Unix(1543626724, 0).In(loc),
+				},
+			},
+		},
+		Created: time.Unix(1543626724, 0).In(loc),
+		Updated: time.Unix(1543626724, 0).In(loc),
+	}
+	task30 := &Task{
+		ID:          30,
+		Title:       "task #30 with assignees",
+		Identifier:  "TEST1-15",
+		Index:       15,
+		CreatedByID: 1,
+		CreatedBy:   user1,
+		ProjectID:   1,
+		Assignees: []*user.User{
+			user1,
+			user2,
+		},
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task31 := &Task{
+		ID:           31,
+		Title:        "task #31 with color",
+		Identifier:   "TEST1-16",
+		Index:        16,
+		HexColor:     "f0f0f0",
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task32 := &Task{
+		ID:           32,
+		Title:        "task #32",
+		Identifier:   "TEST3-1",
+		Index:        1,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    3,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task33 := &Task{
+		ID:           33,
+		Title:        "task #33 with percent done",
+		Identifier:   "TEST1-17",
+		Index:        17,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		PercentDone:  0.5,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task39 := &Task{
+		ID:           39,
+		Title:        "task #39",
+		Identifier:   "#0",
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    25,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task47 := &Task{
+		ID:          47,
+		Title:       "task #47 with reminders outside window",
+		Identifier:  "TEST1-32",
+		Index:       32,
+		CreatedByID: 1,
+		CreatedBy:   user1,
+		Reminders: []*TaskReminder{
+			{
+				ID:       6,
+				TaskID:   47,
+				Reminder: time.Date(2018, 8, 1, 12, 0, 0, 0, loc),
+				Created:  time.Unix(1543626724, 0).In(loc),
+			},
+			{
+				ID:       7,
+				TaskID:   47,
+				Reminder: time.Date(2019, 3, 1, 12, 0, 0, 0, loc),
+				Created:  time.Unix(1543626724, 0).In(loc),
+			},
+		},
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+	task48 := &Task{
+		ID:           48,
+		Title:        "Landingpages update",
+		Description:  "Update all landingpages with new branding",
+		Identifier:   "TEST1-33",
+		Index:        33,
+		CreatedByID:  1,
+		CreatedBy:    user1,
+		ProjectID:    1,
+		RelatedTasks: map[RelationKind][]*Task{},
+		Created:      time.Unix(1543626724, 0).In(loc),
+		Updated:      time.Unix(1543626724, 0).In(loc),
+	}
+
+	type fields struct {
+		ProjectID     int64
+		ProjectViewID int64
+		Projects      []*Project
+		SortBy        []string // Is a string, since this is the place where a query string comes from the user
+		OrderBy       []string
+
+		FilterIncludeNulls bool
+		Filter             string
+
+		Expand []TaskCollectionExpandable
+
+		CRUDable    web.CRUDable
+		Permissions web.Permissions
+	}
+	type args struct {
+		search string
+		a      web.Auth
+		page   int
+	}
+	type testcase struct {
+		name    string
+		fields  fields
+		args    args
+		want    []*Task
+		wantErr bool
+	}
+
+	defaultArgs := args{
+		search: "",
+		a:      &user.User{ID: 1},
+		page:   0,
+	}
+
+	taskWithPosition := func(task *Task, position float64) *Task {
+		newTask := &Task{}
+		*newTask = *task
+		newTask.Position = position
+		return newTask
+	}
+
+	tests := []testcase{
+		{
+			name:   "ReadAll Tasks normally",
+			fields: fields{},
+			args:   defaultArgs,
+			want: []*Task{
+				task1,
+				task2,
+				task3,
+				task4,
+				task5,
+				task6,
+				task7,
+				task8,
+				task9,
+				task10,
+				task11,
+				task12,
+				task15,
+				task16,
+				task17,
+				task18,
+				task19,
+				task20,
+				task21,
+				task22,
+				task23,
+				task24,
+				task25,
+				task26,
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task32,
+				task33,
+				task39,
+				task47,
+				task48,
+			},
+			wantErr: false,
+		},
+		{
+			name: "ReadAll Tasks with expanded reaction",
+			fields: fields{
+				Expand: []TaskCollectionExpandable{
+					TaskCollectionExpandReactions,
+				},
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task1WithReaction,
+				task2,
+				task3,
+				task4,
+				task5,
+				task6,
+				task7,
+				task8,
+				task9,
+				task10,
+				task11,
+				task12,
+				task15,
+				task16,
+				task17,
+				task18,
+				task19,
+				task20,
+				task21,
+				task22,
+				task23,
+				task24,
+				task25,
+				task26,
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task32,
+				task33,
+				task39,
+				task47,
+				task48,
+			},
+			wantErr: false,
+		},
+		{
+			// For more sorting tests see task_collection_sort_test.go
+			name: "sorted by done asc and id desc",
+			fields: fields{
+				SortBy:  []string{"done", "id"},
+				OrderBy: []string{"asc", "desc"},
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task48,
+				task47,
+				task33,
+				task32,
+				task31,
+				task30,
+				task29,
+				task28,
+				task27,
+				task26,
+				task25,
+				task24,
+				task23,
+				task22,
+				task21,
+				task20,
+				task19,
+				task18,
+				task17,
+				task16,
+				task15,
+				task12,
+				task11,
+				task10,
+				task9,
+				task8,
+				task7,
+				task6,
+				task5,
+				task4,
+				task3,
+				task1,
+				task2,
+				task39,
+			},
+			wantErr: false,
+		},
+		{
+			name: "ReadAll Tasks with range",
+			fields: fields{
+				Filter: "start_date > '2018-12-11T03:46:40+00:00' || end_date < '2018-12-13T11:20:01+00:00'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task7,
+				task8,
+				task9,
+				task28,
+			},
+			wantErr: false,
+		},
+		{
+			name: "ReadAll Tasks with different range",
+			fields: fields{
+				Filter: "start_date > '2018-12-13T11:20:00+00:00' || end_date < '2018-12-16T22:40:00+00:00'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task8,
+				task9,
+				task28,
+			},
+			wantErr: false,
+		},
+		{
+			name: "ReadAll Tasks with range with start date only",
+			fields: fields{
+				Filter: "start_date > '2018-12-12T07:33:20+00:00'",
+			},
+			args:    defaultArgs,
+			want:    []*Task{},
+			wantErr: false,
+		},
+		{
+			name: "ReadAll Tasks with range with start date only between",
+			fields: fields{
+				Filter: "start_date > '2018-12-12T00:00:00+00:00' && start_date < '2018-12-13T00:00:00+00:00'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task7,
+				task9,
+			},
+			wantErr: false,
+		},
+		{
+			name: "ReadAll Tasks with range with start date only and greater equals",
+			fields: fields{
+				Filter: "start_date >= '2018-12-12T07:33:20+00:00'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task7,
+				task9,
+			},
+			wantErr: false,
+		},
+		{
+			name: "range and nesting",
+			fields: fields{
+				Filter: "(start_date > '2018-12-12T00:00:00+00:00' && start_date < '2018-12-13T00:00:00+00:00') || end_date > '2018-12-13T00:00:00+00:00'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task7,
+				task8,
+				task9,
+				task28,
+			},
+			wantErr: false,
+		},
+		{
+			name: "undone tasks only",
+			fields: fields{
+				Filter: "done = false",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task1,
+				// Task 2 is done
+				task3,
+				task4,
+				task5,
+				task6,
+				task7,
+				task8,
+				task9,
+				task10,
+				task11,
+				task12,
+				task15,
+				task16,
+				task17,
+				task18,
+				task19,
+				task20,
+				task21,
+
+				task22,
+				task23,
+				task24,
+				task25,
+				task26,
+
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task32,
+				task33,
+				task47,
+				task48,
+			},
+			wantErr: false,
+		},
+		{
+			name: "done tasks only",
+			fields: fields{
+				Filter: "done = true",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task2,
+			},
+			wantErr: false,
+		},
+		{
+			name: "done tasks only - not equals done",
+			fields: fields{
+				Filter: "done != false",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task2,
+			},
+			wantErr: false,
+		},
+		{
+			name: "range with nulls",
+			fields: fields{
+				FilterIncludeNulls: true,
+				Filter:             "start_date > '2018-12-11T03:46:40+00:00' || end_date < '2018-12-13T11:20:01+00:00'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task1, // has nil dates
+				task2, // has nil dates
+				task3, // has nil dates
+				task4, // has nil dates
+				task5, // has nil dates
+				task6, // has nil dates
+				task7,
+				task8,
+				task9,
+				task10, // has nil dates
+				task11, // has nil dates
+				task12, // has nil dates
+				task15, // has nil dates
+				task16, // has nil dates
+				task17, // has nil dates
+				task18, // has nil dates
+				task19, // has nil dates
+				task20, // has nil dates
+				task21, // has nil dates
+				task22, // has nil dates
+				task23, // has nil dates
+				task24, // has nil dates
+				task25, // has nil dates
+				task26, // has nil dates
+				task27, // has nil dates
+				task28, // has nil dates
+				task29, // has nil dates
+				task30, // has nil dates
+				task31, // has nil dates
+				task32, // has nil dates
+				task33, // has nil dates
+				task39, // has nil dates
+				task47, // has nil dates
+				task48, // has nil dates
+			},
+			wantErr: false,
+		},
+		{
+			// Tests that FilterIncludeNulls set on a view's saved filter config
+			// is properly applied when loading tasks through that view.
+			name: "range with nulls from view filter",
+			fields: fields{
+				ProjectViewID: 161,
+				ProjectID:     1,
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task1,  // has nil dates
+				task2,  // has nil dates
+				task3,  // has nil dates
+				task4,  // has nil dates
+				task5,  // has nil dates
+				task6,  // has nil dates
+				task7,  // matches start_date filter
+				task8,  // matches end_date filter
+				task9,  // matches both
+				task10, // has nil dates
+				task11, // has nil dates
+				task12, // has nil dates
+				task27, // has start_date, matches filter
+				task28, // has dates, matches filter
+				task29, // has nil dates
+				task30, // has nil dates
+				task31, // has nil dates
+				task33, // has nil dates
+				task47, // has nil dates
+				task48, // has nil dates
+			},
+			wantErr: false,
+		},
+		{
+			name: "favorited tasks",
+			args: defaultArgs,
+			fields: fields{
+				ProjectID: FavoritesPseudoProject.ID,
+			},
+			want: []*Task{
+				task1,
+				task15,
+				// Task 34 is also a favorite, but on a project user 1 has no access to.
+			},
+		},
+		{
+			name: "filtered with like",
+			fields: fields{
+				Filter: "title ~ with",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task7,
+				task8,
+				task9,
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task33,
+				task47,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filtered with like and '",
+			fields: fields{
+				Filter: "title ~ 'with'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task7,
+				task8,
+				task9,
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task33,
+				task47,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filtered reminder dates",
+			fields: fields{
+				Filter: "reminders > '2018-10-01T00:00:00+00:00' && reminders < '2018-12-10T00:00:00+00:00'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task2,
+				task27,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filtered reminder dates should not match task with reminders outside window",
+			fields: fields{
+				Filter: "reminders > '2018-10-01T00:00:00+00:00' && reminders < '2018-12-10T00:00:00+00:00'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task2,
+				task27,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filtered reminder dates narrow window excludes all",
+			fields: fields{
+				Filter: "reminders > '2018-09-01T00:00:00+00:00' && reminders < '2018-09-02T00:00:00+00:00'",
+			},
+			args:    defaultArgs,
+			want:    []*Task{},
+			wantErr: false,
+		},
+		{
+			name: "filtered reminder dates with OR should match independently",
+			fields: fields{
+				Filter: "reminders > '2019-01-01T00:00:00+00:00' || reminders < '2018-09-01T00:00:00+00:00'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task2,  // has reminder at 2019-06-01 (> 2019-01-01)
+				task47, // has reminder at 2019-03-01 (> 2019-01-01) and 2018-08-01 (< 2018-09-01)
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter in keyword",
+			fields: fields{
+				Filter: "id in '1,2,34'", // user does not have permission to access task 34
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task1,
+				task2,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter in keyword without quotes",
+			fields: fields{
+				Filter: "id in 1,2,34", // user does not have permission to access task 34
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task1,
+				task2,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter in",
+			fields: fields{
+				Filter: "id ?= '1,2,34'", // user does not have permission to access task 34
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task1,
+				task2,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter not in",
+			fields: fields{
+				Filter: "id not in '1,2,3,4'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task5,
+				task6,
+				task7,
+				task8,
+				task9,
+				task10,
+				task11,
+				task12,
+				task15,
+				task16,
+				task17,
+				task18,
+				task19,
+				task20,
+				task21,
+				task22,
+				task23,
+				task24,
+				task25,
+				task26,
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task32,
+				task33,
+				task39,
+				task47,
+				task48,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter assignees by username",
+			fields: fields{
+				Filter: "assignees = 'user1'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task30,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter assignees by username with users field name",
+			fields: fields{
+				Filter: "users = 'user1'",
+			},
+			args:    defaultArgs,
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "filter assignees by username with user_id field name",
+			fields: fields{
+				Filter: "user_id = 'user1'",
+			},
+			args:    defaultArgs,
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name: "filter assignees by multiple username",
+			fields: fields{
+				Filter: "assignees = 'user1' || assignees = 'user2'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task30,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter assignees by numbers",
+			fields: fields{
+				Filter: "assignees = 1",
+			},
+			args:    defaultArgs,
+			want:    []*Task{},
+			wantErr: false,
+		},
+		{
+			name: "filter assignees by name with like",
+			fields: fields{
+				Filter: "assignees ~ 'user'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				// Same as without any filter since the filter is ignored
+				task1,
+				task2,
+				task3,
+				task4,
+				task5,
+				task6,
+				task7,
+				task8,
+				task9,
+				task10,
+				task11,
+				task12,
+				task15,
+				task16,
+				task17,
+				task18,
+				task19,
+				task20,
+				task21,
+				task22,
+				task23,
+				task24,
+				task25,
+				task26,
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task32,
+				task33,
+				task39,
+				task47,
+				task48,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter assignees in by id",
+			fields: fields{
+				Filter: "assignees ?= '1,2'",
+			},
+			args:    defaultArgs,
+			want:    []*Task{},
+			wantErr: false,
+		},
+		{
+			name: "filter assignees in by username",
+			fields: fields{
+				Filter: "assignees ?= 'user1,user2'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task30,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter by creator username",
+			fields: fields{
+				Filter: "created_by = 'user6'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task15,
+				task16,
+				task17,
+				task18,
+				task19,
+				task20,
+				task21,
+				task22,
+				task23,
+				task24,
+				task25,
+				task26,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter by creator username in list",
+			fields: fields{
+				Filter: "created_by ?= 'user6'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task15,
+				task16,
+				task17,
+				task18,
+				task19,
+				task20,
+				task21,
+				task22,
+				task23,
+				task24,
+				task25,
+				task26,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter by creator username not equals",
+			fields: fields{
+				Filter: "created_by != 'user6'",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task1,
+				task2,
+				task3,
+				task4,
+				task5,
+				task6,
+				task7,
+				task8,
+				task9,
+				task10,
+				task11,
+				task12,
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task32,
+				task33,
+				task39,
+				task47,
+				task48,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter by creator unknown username",
+			fields: fields{
+				Filter: "created_by = 'nonexistentuser'",
+			},
+			args:    defaultArgs,
+			want:    []*Task{},
+			wantErr: false,
+		},
+		{
+			name: "filter labels",
+			fields: fields{
+				Filter: "labels = 4",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task1,
+				task2,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter labels with nulls",
+			fields: fields{
+				Filter:             "labels = 5",
+				FilterIncludeNulls: true,
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task3,
+				task4,
+				task5,
+				task6,
+				task7,
+				task8,
+				task9,
+				task10,
+				task11,
+				task12,
+				task15,
+				task16,
+				task17,
+				task18,
+				task19,
+				task20,
+				task21,
+				task22,
+				task23,
+				task24,
+				// task25 has label #10 now, so FilterIncludeNulls no longer matches it
+				task26,
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task32,
+				task33,
+				task39,
+				task47,
+				task48,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter labels not eq",
+			fields: fields{
+				Filter: "labels != 5",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task1,
+				task2,
+				task3,
+				task4,
+				task5,
+				task6,
+				task7,
+				task8,
+				task9,
+				task10,
+				task11,
+				task12,
+				task15,
+				task16,
+				task17,
+				task18,
+				task19,
+				task20,
+				task21,
+				task22,
+				task23,
+				task24,
+				task25,
+				task26,
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task32,
+				task33,
+				//task35,
+				// task 35 has a label 5 and 4
+				task39,
+				task47,
+				task48,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter labels not in",
+			fields: fields{
+				Filter: "labels not in 5",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task1,
+				task2,
+				task3,
+				task4,
+				task5,
+				task6,
+				task7,
+				task8,
+				task9,
+				task10,
+				task11,
+				task12,
+				task15,
+				task16,
+				task17,
+				task18,
+				task19,
+				task20,
+				task21,
+				task22,
+				task23,
+				task24,
+				task25,
+				task26,
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task32,
+				task33,
+				//task35,
+				// task 35 has a label 5 and 4
+				task39,
+				task47,
+				task48,
+			},
+			wantErr: false,
+		},
+		{
+			// Regression: AND-joined equality filters on the same sub-table must
+			// NOT be merged into a single EXISTS (each label lives on a separate row).
+			name: "filter labels AND both must exist",
+			fields: fields{
+				Filter: "labels = 4 && labels = 5",
+			},
+			args:    defaultArgs,
+			want:    []*Task{},
+			wantErr: false,
+		},
+		{
+			// Regression: AND-joined negative filters must NOT be merged into a
+			// single NOT EXISTS (would produce trivially-true condition).
+			name: "filter labels not eq AND both excluded",
+			fields: fields{
+				Filter: "labels != 4 && labels != 5",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				// Tasks that have neither label 4 nor label 5
+				task3,
+				task4,
+				task5,
+				task6,
+				task7,
+				task8,
+				task9,
+				task10,
+				task11,
+				task12,
+				task15,
+				task16,
+				task17,
+				task18,
+				task19,
+				task20,
+				task21,
+				task22,
+				task23,
+				task24,
+				task25,
+				task26,
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task32,
+				task33,
+				task39,
+				task47,
+				task48,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter project_id",
+			fields: fields{
+				Filter: "project_id = 6",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task15,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter project",
+			fields: fields{
+				Filter: "project = 6",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task15,
+			},
+			wantErr: false,
+		},
+		{
+			name: "filter project forbidden",
+			fields: fields{
+				Filter: "project_id = 20", // user1 has no access to project 20
+			},
+			args:    defaultArgs,
+			want:    []*Task{},
+			wantErr: false,
+		},
+		// TODO filter parent project?
+		{
+			name: "filter by index",
+			fields: fields{
+				Filter: "index = 5",
+			},
+			args: defaultArgs,
+			want: []*Task{
+				task5,
+			},
+			wantErr: false,
+		},
+		{
+			name: "order by position",
+			fields: fields{
+				SortBy:        []string{"position", "id"},
+				OrderBy:       []string{"asc", "asc"},
+				ProjectViewID: 1,
+				ProjectID:     1,
+			},
+			args: args{
+				a: &user.User{ID: 1},
+			},
+			want: []*Task{
+				// The only tasks with a position set
+				taskWithPosition(task1, 2),
+				taskWithPosition(task2, 4),
+				// the other ones don't have a position set
+				task3,
+				task4,
+				task5,
+				task6,
+				task7,
+				task8,
+				task9,
+				task10,
+				task11,
+				task12,
+				//task15,
+				//task16,
+				//task17,
+				//task18,
+				//task19,
+				//task20,
+				//task21,
+				//task22,
+				//task23,
+				//task24,
+				//task25,
+				//task26,
+				task27,
+				task28,
+				task29,
+				task30,
+				task31,
+				task33,
+				task47,
+				task48,
+			},
+		},
+		{
+			name: "order by due date",
+			fields: fields{
+				SortBy:  []string{"due_date", "id"},
+				OrderBy: []string{"asc", "desc"},
+			},
+			args: args{
+				a: &user.User{ID: 1},
+			},
+			want: []*Task{
+				// The only tasks with a due date
+				task6,
+				task5,
+				task28,
+				// The other ones don't have a due date
+				task48,
+				task47,
+				task39,
+				task33,
+				task32,
+				task31,
+				task30,
+				task29,
+				task27,
+				task26,
+				task25,
+				task24,
+				task23,
+				task22,
+				task21,
+				task20,
+				task19,
+				task18,
+				task17,
+				task16,
+				task15,
+				task12,
+				task11,
+				task10,
+				task9,
+				task8,
+				task7,
+				task4,
+				task3,
+				task2,
+				task1,
+			},
+		},
+		{
+			name: "saved filter with sort order",
+			fields: fields{
+				ProjectID: -2,
+				SortBy:    []string{"title", "id"},
+				OrderBy:   []string{"desc", "asc"},
+			},
+			args: args{
+				a: &user.User{ID: 1},
+			},
+			want: []*Task{
+				task9,
+				task8,
+				task7,
+				task6,
+				task5,
+				task28,
+			},
+		},
+		{
+			name: "saved filter with sort order asc",
+			fields: fields{
+				ProjectID: -2,
+				SortBy:    []string{"title", "id"},
+				OrderBy:   []string{"asc", "asc"},
+			},
+			args: args{
+				a: &user.User{ID: 1},
+			},
+			want: []*Task{
+				task28,
+				task5,
+				task6,
+				task7,
+				task8,
+				task9,
+			},
+		},
+		{
+			name: "saved filter with sort by due date",
+			fields: fields{
+				ProjectID: -2,
+				SortBy:    []string{"due_date", "id"},
+				OrderBy:   []string{"asc", "asc"},
+			},
+			args: args{
+				a: &user.User{ID: 1},
+			},
+			want: []*Task{
+				task6,
+				task5,
+				task28,
+				task7,
+				task8,
+				task9,
+			},
+		},
+		// TODO unix dates
+		// TODO date magic
+	}
+
+	// Here we're explicitly testing search with and without paradeDB. Both return different results but that's
+	// expected - paradeDB returns more results than other databases with a naive like-search.
+
+	if !db.ParadeDBAvailable() {
+		tests = append(tests, testcase{
+			name:   "search for task index",
+			fields: fields{},
+			args: args{
+				search: "number #17",
+				a:      &user.User{ID: 1},
+				page:   0,
+			},
+			want: []*Task{
+				task33, // has the index 17
+			},
+			wantErr: false,
+		})
+	}
+
+	if db.ParadeDBAvailable() {
+		// ParadeDB fuzzy(1, prefix=true) on "17" also matches tokens within
+		// edit distance 1 ("1", "7", "10"-"19", "27", "47"), returning more results.
+		t.Run("search for task index", func(t *testing.T) {
+			db.LoadAndAssertFixtures(t)
+			s := db.NewSession()
+			defer s.Close()
+
+			lt := &TaskCollection{}
+			got, _, _, err := lt.ReadAll(s, &user.User{ID: 1}, "number #17", 0, 50)
+			require.NoError(t, err)
+			gotTasks := got.([]*Task)
+			require.Len(t, gotTasks, 14)
+			gotIDs := make([]int64, len(gotTasks))
+			for i, tsk := range gotTasks {
+				gotIDs[i] = tsk.ID
+			}
+			assert.Contains(t, gotIDs, task17.ID, "should contain task #17 (has #17 in title)")
+			assert.Contains(t, gotIDs, task33.ID, "should contain task #33 (has index 17)")
+		})
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db.LoadAndAssertFixtures(t)
+			s := db.NewSession()
+			defer s.Close()
+
+			lt := &TaskCollection{
+				ProjectID:     tt.fields.ProjectID,
+				ProjectViewID: tt.fields.ProjectViewID,
+				SortBy:        tt.fields.SortBy,
+				OrderBy:       tt.fields.OrderBy,
+
+				FilterIncludeNulls: tt.fields.FilterIncludeNulls,
+
+				Filter: tt.fields.Filter,
+
+				Expand: tt.fields.Expand,
+
+				CRUDable:    tt.fields.CRUDable,
+				Permissions: tt.fields.Permissions,
+			}
+			got, _, _, err := lt.ReadAll(s, tt.args.a, tt.args.search, tt.args.page, 50)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Test %s, Task.ReadAll() error = %v, wantErr %v", tt.name, err, tt.wantErr)
+				return
+			}
+			if gotTasks, is := got.([]*Task); is {
+				for _, task := range gotTasks {
+					assert.NotEqual(t, int64(51), task.ID, "the soft-deleted task 51 must never appear in any result")
+				}
+			}
+			if diff, equal := messagediff.PrettyDiff(tt.want, got); !equal {
+				var is bool
+				var gotTasks []*Task
+				gotTasks, is = got.([]*Task)
+				if !is {
+					gotTasks = []*Task{}
+				}
+				if len(gotTasks) == 0 && len(tt.want) == 0 {
+					return
+				}
+
+				gotIDs := []int64{}
+				for _, t := range got.([]*Task) {
+					gotIDs = append(gotIDs, t.ID)
+				}
+
+				wantIDs := []int64{}
+				for _, t := range tt.want {
+					wantIDs = append(wantIDs, t.ID)
+				}
+				sort.Slice(wantIDs, func(i, j int) bool {
+					return wantIDs[i] < wantIDs[j]
+				})
+				sort.Slice(gotIDs, func(i, j int) bool {
+					return gotIDs[i] < gotIDs[j]
+				})
+
+				diffIDs, _ := messagediff.PrettyDiff(wantIDs, gotIDs)
+
+				t.Errorf("Test %s, Task.ReadAll() = %v, \nwant %v, \ndiff: %v \n\n diffIDs: %v", tt.name, got, tt.want, diff, diffIDs)
+			}
+		})
+	}
+}
+
+func TestTaskCollection_SubtaskRemainsAfterMove(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	u := &user.User{ID: 1}
+
+	c := &TaskCollection{
+		ProjectID: 1,
+		Expand:    []TaskCollectionExpandable{TaskCollectionExpandSubtasks},
+	}
+
+	res, _, _, err := c.ReadAll(s, u, "", 0, 50)
+	require.NoError(t, err)
+	tasks, ok := res.([]*Task)
+	require.True(t, ok)
+
+	found := false
+	for _, tsk := range tasks {
+		if tsk.ID == 29 {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "subtask should be returned before moving")
+
+	subtask := &Task{ID: 29, ProjectID: 7}
+	err = subtask.Update(s, u)
+	require.NoError(t, err)
+	require.NoError(t, s.Commit())
+
+	s2 := db.NewSession()
+	defer s2.Close()
+	c = &TaskCollection{
+		ProjectID: 7,
+		Expand:    []TaskCollectionExpandable{TaskCollectionExpandSubtasks},
+	}
+
+	res, _, _, err = c.ReadAll(s2, u, "", 0, 50)
+	require.NoError(t, err)
+	tasks, ok = res.([]*Task)
+	require.True(t, ok)
+
+	found = false
+	for _, tsk := range tasks {
+		if tsk.ID == 29 {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "subtask should be returned after moving to another project")
+}
+
+func TestTaskSearchWithExpandSubtasks(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	project, err := GetProjectSimpleByID(s, 36)
+	require.NoError(t, err)
+
+	opts := &taskSearchOptions{
+		search: "Caldav",
+		expand: []TaskCollectionExpandable{TaskCollectionExpandSubtasks},
+	}
+
+	tasks, _, _, err := getRawTasksForProjects(s, []*Project{project}, &user.User{ID: 15}, opts)
+	require.NoError(t, err)
+	require.NotEmpty(t, tasks)
+}
+
+func TestTaskCollection_SubtaskWithMultipleParentsNoDuplicates(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	u := &user.User{ID: 15}
+
+	// Use existing tasks from fixtures:
+	// - Task 41: Parent task in project 36 (already exists)
+	// - Task 42: Another parent task in project 36 (already exists)
+	// - Task 43: Subtask in project 36 (already a subtask of task 41)
+
+	// Add a second parent relationship: task 43 -> task 42
+	// This will make task 43 have multiple parents (task 41 and task 42)
+	relation := &TaskRelation{
+		TaskID:       43, // subtask
+		OtherTaskID:  42, // second parent
+		RelationKind: RelationKindParenttask,
+		CreatedByID:  15,
+	}
+	_, err := s.Insert(relation)
+	require.NoError(t, err)
+
+	// Create inverse relation: task 42 -> task 43
+	inverseRelation := &TaskRelation{
+		TaskID:       42, // second parent
+		OtherTaskID:  43, // subtask
+		RelationKind: RelationKindSubtask,
+		CreatedByID:  15,
+	}
+	_, err = s.Insert(inverseRelation)
+	require.NoError(t, err)
+
+	// Test Project 36 - should include tasks 41, 42, and 43, but task 43 should only appear once
+	c := &TaskCollection{
+		ProjectID: 36,
+		Expand:    []TaskCollectionExpandable{TaskCollectionExpandSubtasks},
+	}
+
+	res, _, _, err := c.ReadAll(s, u, "", 0, 50)
+	require.NoError(t, err)
+	tasks, ok := res.([]*Task)
+	require.True(t, ok)
+
+	// Count how many times task 43 (the subtask) appears
+	subtaskCount := 0
+	for _, task := range tasks {
+		if task.ID == 43 {
+			subtaskCount++
+		}
+	}
+
+	// The subtask should appear exactly once (as a subtask, not as a standalone task)
+	assert.Equal(t, 1, subtaskCount, "Subtask should appear exactly once in Project 36")
+
+	// Verify that both parent tasks are present
+	foundParent1 := false
+	foundParent2 := false
+	for _, task := range tasks {
+		if task.ID == 41 {
+			foundParent1 = true
+		}
+		if task.ID == 42 {
+			foundParent2 = true
+		}
+	}
+	assert.True(t, foundParent1, "Parent task 41 should be present")
+	assert.True(t, foundParent2, "Parent task 42 should be present")
+}
+
+// TestTaskCollection_ExpandSubtasksPaginatesRoots verifies the maintainer's exact
+// pagination scenario: with expand=subtasks the LIMIT must slice ROOTS (top-level
+// tasks), and subtasks ride along beyond the limit without consuming it. totalCount
+// equals the number of roots, not the flat task count. Guards #2345.
+func TestTaskCollection_ExpandSubtasksPaginatesRoots(t *testing.T) {
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	u := &user.User{ID: 1}
+
+	project := &Project{Title: "pagination-roots", OwnerID: u.ID}
+	_, err := s.Insert(project)
+	require.NoError(t, err)
+
+	// 40 top-level tasks
+	topLevel := make([]*Task, 0, 40)
+	for i := 1; i <= 40; i++ {
+		task := &Task{
+			Title:       "root",
+			ProjectID:   project.ID,
+			CreatedByID: u.ID,
+			Index:       int64(i),
+		}
+		_, err = s.Insert(task)
+		require.NoError(t, err)
+		topLevel = append(topLevel, task)
+	}
+
+	// 10 subtasks, each scattered as a child of some top-level task
+	parentIdx := []int{0, 4, 9, 12, 18, 22, 27, 31, 35, 39}
+	for i, idx := range parentIdx {
+		sub := &Task{
+			Title:       "sub",
+			ProjectID:   project.ID,
+			CreatedByID: u.ID,
+			Index:       int64(41 + i),
+		}
+		_, err = s.Insert(sub)
+		require.NoError(t, err)
+
+		rel := &TaskRelation{
+			TaskID:       topLevel[idx].ID,
+			OtherTaskID:  sub.ID,
+			RelationKind: RelationKindSubtask,
+		}
+		require.NoError(t, rel.Create(s, u))
+	}
+	require.NoError(t, s.Commit())
+
+	s2 := db.NewSession()
+	defer s2.Close()
+
+	expand := []TaskCollectionExpandable{TaskCollectionExpandSubtasks}
+
+	// Page 1: 25 roots + their subtasks; totalCount = 40 roots
+	page1, _, total1, err := getRawTasksForProjects(s2, []*Project{project}, u, &taskSearchOptions{
+		expand:  expand,
+		page:    1,
+		perPage: 25,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(40), total1, "totalCount must count roots only (40), not the flat 50")
+
+	roots1, subs1 := countRootsAndSubs(page1)
+	assert.Equal(t, 25, roots1, "page 1 must contain exactly 25 root tasks")
+	assert.GreaterOrEqual(t, subs1, 1, "page 1 must also carry the subtasks of its roots")
+
+	// Page 2: 15 roots (26-40) + their subtasks
+	page2, _, total2, err := getRawTasksForProjects(s2, []*Project{project}, u, &taskSearchOptions{
+		expand:  expand,
+		page:    2,
+		perPage: 25,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, int64(40), total2)
+
+	roots2, _ := countRootsAndSubs(page2)
+	assert.Equal(t, 15, roots2, "page 2 must contain the remaining 15 root tasks")
+}
+
+// countRootsAndSubs splits the pagination result set into top-level tasks and
+// subtasks using the titles assigned by the test ("root" vs "sub").
+func countRootsAndSubs(tasks []*Task) (roots, subs int) {
+	for _, tsk := range tasks {
+		if tsk.Title == "sub" {
+			subs++
+		} else {
+			roots++
+		}
+	}
+	return roots, subs
+}
+
+// TestTaskCollection_ExpandSubtasksFilterMatchesSubtaskOnly covers #2646 case A:
+// a filter that matches only a subtask (whose same-project parent is filtered out)
+// must return that subtask as a root. The old same-project proxy returned [].
+func TestTaskCollection_ExpandSubtasksFilterMatchesSubtaskOnly(t *testing.T) {
+	u := &user.User{ID: 1}
+
+	project, _, sub := setupSubtaskExpansionFixture(t, u, "filter-matches-subtask", func(parent, sub *Task) {
+		parent.Priority = 1
+		sub.Title = "matching subtask"
+		sub.Priority = 5
+	})
+
+	s2 := db.NewSession()
+	defer s2.Close()
+
+	filters, err := getTaskFiltersFromFilterString("priority = 5", "")
+	require.NoError(t, err)
+
+	tasks, _, _, err := getRawTasksForProjects(s2, []*Project{project}, u, &taskSearchOptions{
+		expand:        []TaskCollectionExpandable{TaskCollectionExpandSubtasks},
+		parsedFilters: filters,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, tasks, 1, "the matching subtask must be returned even though its parent is filtered out")
+	assert.Equal(t, sub.ID, tasks[0].ID)
+}
+
+// TestTaskCollection_ExpandSubtasksFilterMatchesParentOnly covers #2646 case B:
+// a filter matching only the parent returns the parent plus its (non-matching)
+// subtask, nested, with no duplication.
+func TestTaskCollection_ExpandSubtasksFilterMatchesParentOnly(t *testing.T) {
+	u := &user.User{ID: 1}
+
+	project, parent, sub := setupSubtaskExpansionFixture(t, u, "filter-matches-parent", func(parent, sub *Task) {
+		parent.Title = "matching parent"
+		parent.Priority = 5
+		sub.Title = "subtask"
+		sub.Priority = 1
+	})
+
+	s2 := db.NewSession()
+	defer s2.Close()
+
+	filters, err := getTaskFiltersFromFilterString("priority = 5", "")
+	require.NoError(t, err)
+
+	tasks, _, total, err := getRawTasksForProjects(s2, []*Project{project}, u, &taskSearchOptions{
+		expand:        []TaskCollectionExpandable{TaskCollectionExpandSubtasks},
+		parsedFilters: filters,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(1), total, "only the parent is a root, so the count is 1")
+
+	ids := map[int64]int{}
+	for _, tsk := range tasks {
+		ids[tsk.ID]++
+	}
+	assert.Equal(t, 1, ids[parent.ID], "parent present exactly once")
+	assert.Equal(t, 1, ids[sub.ID], "subtask rides along exactly once, no duplication")
+	assert.Len(t, tasks, 2)
+}
+
+// setupSubtaskExpansionFixture creates a project with a parent task, a subtask and
+// the relation linking them, for tests of the subtask-expansion root condition.
+// apply, if non-nil, mutates parent and sub before they're inserted.
+func setupSubtaskExpansionFixture(t *testing.T, u *user.User, title string, apply func(parent, sub *Task)) (project *Project, parent, sub *Task) {
+	t.Helper()
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	project = &Project{Title: title, OwnerID: u.ID}
+	_, err := s.Insert(project)
+	require.NoError(t, err)
+
+	parent = &Task{Title: "parent", ProjectID: project.ID, CreatedByID: u.ID, Index: 1}
+	sub = &Task{Title: "sub", ProjectID: project.ID, CreatedByID: u.ID, Index: 2}
+	if apply != nil {
+		apply(parent, sub)
+	}
+
+	_, err = s.Insert(parent)
+	require.NoError(t, err)
+	_, err = s.Insert(sub)
+	require.NoError(t, err)
+
+	rel := &TaskRelation{TaskID: parent.ID, OtherTaskID: sub.ID, RelationKind: RelationKindSubtask}
+	require.NoError(t, rel.Create(s, u))
+	require.NoError(t, s.Commit())
+	return
+}
+
+// TestTaskCollection_ExpandSubtasksSoftDeleted covers the two soft-delete gaps
+// the xorm deleted tag can't reach in the subtask expansion: the raw recursive
+// CTE fetching subtasks, and the "tasks parent_tasks" self-join alias in the
+// root condition.
+func TestTaskCollection_ExpandSubtasksSoftDeleted(t *testing.T) {
+	u := &user.User{ID: 1}
+
+	expand := []TaskCollectionExpandable{TaskCollectionExpandSubtasks}
+
+	t.Run("soft-deleted subtask is omitted", func(t *testing.T) {
+		project, parent, sub := setupSubtaskExpansionFixture(t, u, "deleted-subtask", nil)
+
+		s := db.NewSession()
+		defer s.Close()
+
+		// Soft delete the subtask; its relation rows are kept, so only the
+		// deleted_at filter in the CTE keeps it out of the expansion
+		_, err := s.ID(sub.ID).Delete(&Task{})
+		require.NoError(t, err)
+		require.NoError(t, s.Commit())
+
+		s2 := db.NewSession()
+		defer s2.Close()
+
+		tasks, _, _, err := getRawTasksForProjects(s2, []*Project{project}, u, &taskSearchOptions{expand: expand})
+		require.NoError(t, err)
+
+		require.Len(t, tasks, 1, "the soft-deleted subtask must not ride along")
+		assert.Equal(t, parent.ID, tasks[0].ID)
+	})
+
+	t.Run("children of a soft-deleted parent become roots", func(t *testing.T) {
+		project, parent, sub := setupSubtaskExpansionFixture(t, u, "deleted-parent", nil)
+
+		s := db.NewSession()
+		defer s.Close()
+
+		_, err := s.ID(parent.ID).Delete(&Task{})
+		require.NoError(t, err)
+		require.NoError(t, s.Commit())
+
+		s2 := db.NewSession()
+		defer s2.Close()
+
+		tasks, _, total, err := getRawTasksForProjects(s2, []*Project{project}, u, &taskSearchOptions{expand: expand})
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(1), total, "the orphaned subtask is the only root")
+		require.Len(t, tasks, 1)
+		assert.Equal(t, sub.ID, tasks[0].ID)
+	})
+}
+
+// TestTaskCollection_ExpandSubtasksNullableFilterParent guards #3163: a filter on a
+// nullable column must not drop a matching child just because its parent's value is
+// NULL. The old NOT-over-LEFT-JOIN condition let the NULL predicate make NOT(...)
+// evaluate to NULL, silently excluding the child from the WHERE.
+func TestTaskCollection_ExpandSubtasksNullableFilterParent(t *testing.T) {
+	u := &user.User{ID: 1}
+
+	expand := []TaskCollectionExpandable{TaskCollectionExpandSubtasks}
+
+	t.Run("due_date <= filter, parent has NULL due_date", func(t *testing.T) {
+		project, _, sub := setupSubtaskExpansionFixture(t, u, "null-due-parent", func(parent, sub *Task) {
+			parent.Title = "dateless parent"
+			sub.Title = "dated child"
+			sub.DueDate = time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC)
+		})
+
+		s2 := db.NewSession()
+		defer s2.Close()
+
+		filters, err := getTaskFiltersFromFilterString("due_date <= '2021-01-01T00:00:00'", "UTC")
+		require.NoError(t, err)
+
+		tasks, _, total, err := getRawTasksForProjects(s2, []*Project{project}, u, &taskSearchOptions{
+			expand:             expand,
+			parsedFilters:      filters,
+			filterIncludeNulls: false,
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(1), total, "the child with a matching due date is the only root")
+		require.Len(t, tasks, 1, "the child must not be dropped by the parent's NULL due_date")
+		assert.Equal(t, sub.ID, tasks[0].ID)
+	})
+
+	t.Run("gantt-shaped OR date window, dateless parent", func(t *testing.T) {
+		project, _, sub := setupSubtaskExpansionFixture(t, u, "null-dates-parent", func(parent, sub *Task) {
+			parent.Title = "dateless parent"
+			sub.Title = "dated child"
+			sub.StartDate = time.Date(2020, 6, 1, 0, 0, 0, 0, time.UTC)
+			sub.EndDate = time.Date(2020, 6, 10, 0, 0, 0, 0, time.UTC)
+			sub.DueDate = time.Date(2020, 6, 5, 0, 0, 0, 0, time.UTC)
+		})
+
+		s2 := db.NewSession()
+		defer s2.Close()
+
+		filter := "(start_date >= '2020-01-01T00:00:00' && start_date <= '2020-12-31T00:00:00') || " +
+			"(end_date >= '2020-01-01T00:00:00' && end_date <= '2020-12-31T00:00:00') || " +
+			"(due_date >= '2020-01-01T00:00:00' && due_date <= '2020-12-31T00:00:00')"
+		filters, err := getTaskFiltersFromFilterString(filter, "UTC")
+		require.NoError(t, err)
+
+		tasks, _, total, err := getRawTasksForProjects(s2, []*Project{project}, u, &taskSearchOptions{
+			expand:             expand,
+			parsedFilters:      filters,
+			filterIncludeNulls: false,
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(1), total, "the child inside the date window is the only root")
+		require.Len(t, tasks, 1, "the child must not be dropped by the parent's NULL dates")
+		assert.Equal(t, sub.ID, tasks[0].ID)
+	})
+}
+
+// TestTaskCollection_ExpandSubtasksSearchMirror guards the second #3163 bug: the
+// search was never mirrored into the parent root predicate. A search matching only
+// the child must still return the child as a root; a search matching only the
+// parent keeps the parent as the sole root with the child nested below it.
+func TestTaskCollection_ExpandSubtasksSearchMirror(t *testing.T) {
+	u := &user.User{ID: 1}
+
+	titles := func(parent, sub *Task) {
+		parent.Title = "alphaparent"
+		sub.Title = "betachild"
+	}
+
+	expand := []TaskCollectionExpandable{TaskCollectionExpandSubtasks}
+
+	t.Run("search matches child only", func(t *testing.T) {
+		project, _, sub := setupSubtaskExpansionFixture(t, u, "search-child", titles)
+
+		s2 := db.NewSession()
+		defer s2.Close()
+
+		tasks, _, total, err := getRawTasksForProjects(s2, []*Project{project}, u, &taskSearchOptions{
+			expand: expand,
+			search: "betachild",
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(1), total, "the child matching the search is the only root")
+		require.Len(t, tasks, 1, "the child must not be dropped because the parent misses the search")
+		assert.Equal(t, sub.ID, tasks[0].ID)
+	})
+
+	t.Run("search matches parent only keeps child nested", func(t *testing.T) {
+		project, parent, sub := setupSubtaskExpansionFixture(t, u, "search-parent", titles)
+
+		s2 := db.NewSession()
+		defer s2.Close()
+
+		tasks, _, total, err := getRawTasksForProjects(s2, []*Project{project}, u, &taskSearchOptions{
+			expand: expand,
+			search: "alphaparent",
+		})
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(1), total, "only the parent is a root")
+		ids := map[int64]int{}
+		for _, tsk := range tasks {
+			ids[tsk.ID]++
+		}
+		assert.Equal(t, 1, ids[parent.ID], "parent present exactly once as the root")
+		assert.Equal(t, 1, ids[sub.ID], "child rides along nested, not as a second root")
+		assert.Len(t, tasks, 2)
+	})
+}
+
+// TestTaskCollection_ExpandSubtasksSearchMirrorFuzzy guards #2954: on ParadeDB the
+// parent search mirror must use the same BM25 matching as the result set. A parent
+// matching the search only via fuzzy matching (no substring match) must still demote
+// its child from the roots; the old ILIKE mirror missed it and returned the child as
+// a duplicate root.
+func TestTaskCollection_ExpandSubtasksSearchMirrorFuzzy(t *testing.T) {
+	if !db.ParadeDBAvailable() {
+		t.Skip("requires ParadeDB")
+	}
+
+	u := &user.User{ID: 1}
+
+	project, parent, sub := setupSubtaskExpansionFixture(t, u, "search-fuzzy-parent", func(parent, sub *Task) {
+		parent.Title = "wombatize errands"
+		sub.Title = "wombatise subtask"
+	})
+
+	s2 := db.NewSession()
+	defer s2.Close()
+
+	tasks, _, total, err := getRawTasksForProjects(s2, []*Project{project}, u, &taskSearchOptions{
+		expand: []TaskCollectionExpandable{TaskCollectionExpandSubtasks},
+		search: "wombatise",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(1), total, "the fuzzy-matched parent is the only root")
+	ids := map[int64]int{}
+	for _, tsk := range tasks {
+		ids[tsk.ID]++
+	}
+	assert.Equal(t, 1, ids[parent.ID], "parent present exactly once as the root")
+	assert.Equal(t, 1, ids[sub.ID], "child nests under the fuzzy-matched parent, not as a second root")
+	assert.Len(t, tasks, 2)
+}
+
+// TestTaskCollection_ExpandSubtasksMultiParentCrossScope guards the multi-parent case
+// from #2954: a task with one parent inside the queried scope and another parent
+// outside it must nest under the in-scope parent. The old per-row LEFT JOIN root check
+// let the out-of-scope parent's row promote the child to a root.
+func TestTaskCollection_ExpandSubtasksMultiParentCrossScope(t *testing.T) {
+	u := &user.User{ID: 1}
+
+	project, parent, sub := setupSubtaskExpansionFixture(t, u, "multi-parent-in-scope", nil)
+
+	s := db.NewSession()
+	defer s.Close()
+
+	otherProject := &Project{Title: "multi-parent-out-of-scope", OwnerID: u.ID}
+	_, err := s.Insert(otherProject)
+	require.NoError(t, err)
+
+	otherParent := &Task{Title: "out of scope parent", ProjectID: otherProject.ID, CreatedByID: u.ID, Index: 1}
+	_, err = s.Insert(otherParent)
+	require.NoError(t, err)
+
+	rel := &TaskRelation{TaskID: otherParent.ID, OtherTaskID: sub.ID, RelationKind: RelationKindSubtask}
+	require.NoError(t, rel.Create(s, u))
+	require.NoError(t, s.Commit())
+
+	s2 := db.NewSession()
+	defer s2.Close()
+
+	tasks, _, total, err := getRawTasksForProjects(s2, []*Project{project}, u, &taskSearchOptions{
+		expand: []TaskCollectionExpandable{TaskCollectionExpandSubtasks},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(1), total, "the in-scope parent is the only root")
+	ids := map[int64]int{}
+	for _, tsk := range tasks {
+		ids[tsk.ID]++
+	}
+	assert.Equal(t, 1, ids[parent.ID], "in-scope parent present exactly once as the root")
+	assert.Equal(t, 1, ids[sub.ID], "child nests under the in-scope parent despite the out-of-scope one")
+	assert.Len(t, tasks, 2)
+}
+
+// Reproduces https://github.com/go-vikunja/vikunja/issues/3181: with a non-UTC
+// service timezone, a task due in the last hours of the local day must still
+// match "due_date < now/d+1d" when filter_timezone matches that timezone.
+func TestTaskCollection_DateFilterTimezoneBoundary(t *testing.T) {
+	la, err := time.LoadLocation("America/Los_Angeles")
+	require.NoError(t, err)
+
+	orig := config.ServiceTimeZone.GetString()
+	config.ServiceTimeZone.Set("America/Los_Angeles")
+	defer config.ServiceTimeZone.Set(orig)
+
+	db.LoadAndAssertFixtures(t)
+	s := db.NewSession()
+	defer s.Close()
+
+	u := &user.User{ID: 1}
+
+	// One hour before the next local midnight — inside the window the boundary
+	// shift dropped (up to the UTC offset, 7h/8h for America/Los_Angeles).
+	now := time.Now().In(la)
+	nextLocalMidnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, la)
+	task := &Task{
+		Title:     "due late in the local day",
+		ProjectID: 1,
+		DueDate:   nextLocalMidnight.Add(-time.Hour).UTC(),
+	}
+	require.NoError(t, task.Create(s, u))
+	require.NoError(t, s.Commit())
+
+	s2 := db.NewSession()
+	defer s2.Close()
+
+	c := &TaskCollection{
+		Filter:         "done = false && due_date < now/d+1d",
+		FilterTimezone: "America/Los_Angeles",
+	}
+	res, _, _, err := c.ReadAll(s2, u, "", 0, 250)
+	require.NoError(t, err)
+	tasks, ok := res.([]*Task)
+	require.True(t, ok)
+
+	found := false
+	for _, tsk := range tasks {
+		if tsk.ID == task.ID {
+			found = true
+			break
+		}
+	}
+	assert.Truef(t, found, "task due %s (one hour before local midnight) should match", task.DueDate)
+}

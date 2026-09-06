@@ -1,0 +1,46 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+stats.html
+
+node_modules
+.DS_Store
+dist
+dist-dev
+dist-test
+coverage
+*.zip
+.vite/
+
+# Test files
+playwright-report/
+test-results/
+
+# local env files
+.env.local
+.env.*.local
+
+# Editor directories and files
+.vscode
+.idea
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw*
+!rollup.sw.js
+
+
+# Local Netlify folder
+.netlify
+
+# histoire
+.histoire
+package-lock.json
+# Sentry Config File
+.env.sentry-build-plugin

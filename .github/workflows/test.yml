@@ -1,0 +1,589 @@
+name: Test
+
+on:
+  workflow_call:
+
+jobs:
+  mage:
+    runs-on: ubuntu-latest
+    name: prepare-mage
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - name: Cache Mage
+        id: cache-mage
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ runner.os }}-build-mage-${{ hashFiles('magefile.go', 'go.mod', 'go.sum', 'pkg/**/*.go') }}
+          path: |
+            ./mage-static
+      - name: Compile Mage
+        if: ${{ steps.cache-mage.outputs.cache-hit != 'true' }}
+        uses: magefile/mage-action@a662bd8c29d8106879588cfff83b2faf6e6f59db # v4.0.0
+        with:
+          version: latest
+          args: -compile ./mage-static
+      - name: Store Mage Binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mage_bin
+          path: ./mage-static
+
+  api-build:
+    runs-on: ubuntu-latest
+    needs: mage
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download Mage Binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mage_bin
+      - name: Git describe
+        id: ghd
+        uses: proudust/gh-describe@80412be8ce0e77d8afba6b340e34790bc772aa45 # v2.2.0
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - name: Build
+        env:
+          RELEASE_VERSION: ${{ steps.ghd.outputs.describe }}
+        run: |
+          mkdir -p frontend/dist
+          touch frontend/dist/index.html
+          chmod +x ./mage-static
+          ./mage-static build
+      - name: Store Vikunja Binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: vikunja_bin
+          path: ./vikunja
+
+  api-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: prepare frontend files
+        run: |
+          mkdir -p frontend/dist
+          touch frontend/dist/index.html
+      - uses: ./.github/actions/golangci-lint
+
+  veans-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/golangci-lint
+        with:
+          working-directory: veans
+
+  veans-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - name: Install mage
+        # The cached mage-static artifact has the parent magefile compiled
+        # in — we need a generic mage binary to pick up veans/magefile.go.
+        run: go install github.com/magefile/mage@v1.17.2
+      - name: Run unit tests
+        # `mage test` is the Aliases entry for Test.All which passes
+        # `-short` — the e2e package's TestMain skips under -short,
+        # mirroring the parent monorepo's pkg/webtests convention. The
+        # heavier test-veans-e2e job runs the full suite against the
+        # api-build artifact.
+        working-directory: veans
+        run: mage test
+
+  check-translations:
+    runs-on: ubuntu-latest
+    needs: mage
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download Mage Binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mage_bin
+      - name: Check
+        run: |
+          chmod +x ./mage-static
+          ./mage-static check:translations
+
+  check-frontend-client:
+    runs-on: ubuntu-latest
+    needs: mage
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download Mage Binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mage_bin
+      - uses: ./.github/actions/setup-frontend
+      - name: Check generated frontend client
+        run: |
+          chmod +x ./mage-static
+          ./mage-static check:frontend-client
+
+  test-migration-smoke:
+    runs-on: ubuntu-latest
+    needs:
+      - api-build
+    strategy:
+      matrix:
+        db:
+          - sqlite
+          - postgres
+          - mariadb
+          - mysql
+    services:
+      migration-smoke-db-mariadb:
+        image: ${{ matrix.db == 'mariadb' && 'mariadb:12@sha256:f54db0cb3ccfe9431aba6d08c65a1763c499789b116b4cb651dd7fcf325965b3' || '' }}
+        env:
+          MYSQL_ROOT_PASSWORD: vikunjatest
+          MYSQL_DATABASE: vikunjatest
+        ports:
+          - 3306:3306
+      migration-smoke-db-mysql:
+        image: ${{ matrix.db == 'mysql' && 'mysql:8@sha256:da906917ca4ace3ba55538b7c2ee97a9bc865ef14a4b6920b021f0249d603f3d' || '' }}
+        env:
+          MYSQL_ROOT_PASSWORD: vikunjatest
+          MYSQL_DATABASE: vikunjatest
+        ports:
+          - 3306:3306
+      migration-smoke-db-postgres:
+        image: postgres:18@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+        env:
+          POSTGRES_PASSWORD: vikunjatest
+          POSTGRES_DB: vikunjatest
+        ports:
+          - 5432:5432
+    steps:
+      - name: Download Unstable
+        run: |
+          wget https://dl.vikunja.io/vikunja/unstable/vikunja-unstable-linux-amd64-full.zip -q -O vikunja-latest.zip
+          unzip vikunja-latest.zip vikunja-unstable-linux-amd64
+      - name: Download Vikunja Binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: vikunja_bin
+      - name: run migration
+        env:
+          VIKUNJA_DATABASE_TYPE: ${{ (matrix.db == 'mariadb' || matrix.db == 'mysql') && 'mysql' || matrix.db }}
+          VIKUNJA_DATABASE_PATH: ./vikunja-migration-test.db
+          VIKUNJA_DATABASE_USER: ${{ matrix.db == 'postgres' && 'postgres' || 'root' }}
+          VIKUNJA_DATABASE_PASSWORD: vikunjatest
+          VIKUNJA_DATABASE_DATABASE: vikunjatest
+          VIKUNJA_DATABASE_SSLMODE: disable
+          VIKUNJA_LOG_DATABASE: stdout
+          VIKUNJA_LOG_DATABASELEVEL: debug
+          VIKUNJA_SERVICE_PUBLICURL: http://127.0.0.1:3456
+        run: |
+          # Wait for MySQL to be ready if using MySQL
+          if [ "$VIKUNJA_DATABASE_TYPE" = "mysql" ]; then
+            echo "Waiting for MySQL to be ready..."
+            until mysql -h 127.0.0.1 -u root -pvikunjatest -e "SELECT 1" &> /dev/null; do
+              echo "MySQL not ready yet, waiting 2 seconds..."
+              sleep 2
+            done
+            echo "MySQL is ready!"
+          fi
+
+          # Wait for PostgreSQL to be ready if using PostgreSQL
+          if [ "$VIKUNJA_DATABASE_TYPE" = "postgres" ]; then
+            echo "Waiting for PostgreSQL to be ready..."
+            until PGPASSWORD=vikunjatest psql -h 127.0.0.1 -U postgres -d vikunjatest -c "SELECT 1" &> /dev/null; do
+              echo "PostgreSQL not ready yet, waiting 2 seconds..."
+              sleep 2
+            done
+            echo "PostgreSQL is ready!"
+          fi
+
+          ./vikunja-unstable-linux-amd64 migrate
+          # Run the migrations from the binary built in the step before
+          chmod +x vikunja
+          ./vikunja migrate
+
+  test-api:
+    runs-on: ubuntu-latest
+    needs:
+      - mage
+    strategy:
+      matrix:
+        db:
+          - sqlite-in-memory
+          - sqlite
+          - postgres
+          - mariadb
+          - mysql
+          - paradedb
+        test:
+          - feature
+          - web
+    services:
+      db-mariadb:
+        image: ${{ matrix.db == 'mariadb' && 'mariadb:12@sha256:5b6a1eac15b85b981a61afb89aea2a22bf76b5f58809d05f0bcc13ab6ec44cb8' || '' }}
+        env:
+          MYSQL_ROOT_PASSWORD: vikunjatest
+          MYSQL_DATABASE: vikunjatest
+        ports:
+          - 3306:3306
+      db-mysql:
+        image: ${{ matrix.db == 'mysql' && 'mysql:8@sha256:da906917ca4ace3ba55538b7c2ee97a9bc865ef14a4b6920b021f0249d603f3d' || '' }}
+        env:
+          MYSQL_ROOT_PASSWORD: vikunjatest
+          MYSQL_DATABASE: vikunjatest
+        ports:
+          - 3306:3306
+      db-postgres:
+        image: ${{ matrix.db == 'postgres' && 'postgres:18@sha256:073e7c8b84e2197f94c8083634640ab37105effe1bc853ca4d5fbece3219b0e8' || '' }}
+        env:
+          POSTGRES_PASSWORD: vikunjatest
+          POSTGRES_DB: vikunjatest
+        ports:
+          - 5432:5432
+      db-paradedb:
+        image: ${{ matrix.db == 'paradedb' && 'paradedb/paradedb:latest-pg17@sha256:3f608f8a531e5552b2e546471271fa11e305a1261b9c4cccfb723b0fa4ad092a' || '' }}
+        env:
+          POSTGRES_PASSWORD: vikunjatest
+          POSTGRES_DB: vikunjatest
+        ports:
+          - 5433:5432
+      test-ldap:
+        image: gitea/test-openldap@sha256:b66527e298d6062d5289dc411d1b8da1c593f8140a3d1f863e8d9d021234122f
+        ports:
+          - 389:389
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download Mage Binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mage_bin
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - name: Configure Postgres for faster tests
+        if: matrix.db == 'postgres' || matrix.db == 'paradedb'
+        run: |
+          # Connect to Postgres and disable fsync, full_page_writes, and synchronous_commit for faster tests
+          PGPASSWORD=vikunjatest psql -h localhost ${{ matrix.db == 'paradedb' && ' -p 5433' || '' }} -U postgres -d vikunjatest -c "ALTER SYSTEM SET fsync = off;"
+          PGPASSWORD=vikunjatest psql -h localhost ${{ matrix.db == 'paradedb' && ' -p 5433' || '' }} -U postgres -d vikunjatest -c "ALTER SYSTEM SET full_page_writes = off;"
+          PGPASSWORD=vikunjatest psql -h localhost ${{ matrix.db == 'paradedb' && ' -p 5433' || '' }} -U postgres -d vikunjatest -c "ALTER SYSTEM SET synchronous_commit = off;"
+          # Reload the configuration
+          PGPASSWORD=vikunjatest psql -h localhost ${{ matrix.db == 'paradedb' && ' -p 5433' || '' }} -U postgres -d vikunjatest -c "SELECT pg_reload_conf();"
+      - name: test
+        env:
+          VIKUNJA_TESTS_USE_CONFIG: ${{ matrix.db != 'sqlite-in-memory' && 1 || 0 }}
+          VIKUNJA_DATABASE_TYPE: ${{ (matrix.db == 'paradedb' && 'postgres') || ((matrix.db == 'mariadb' || matrix.db == 'mysql') && 'mysql') || matrix.db }}
+          VIKUNJA_DATABASE_USER: ${{ (matrix.db == 'mariadb' || matrix.db == 'mysql') && 'root' || 'postgres' }}
+          VIKUNJA_DATABASE_PASSWORD: vikunjatest
+          VIKUNJA_DATABASE_DATABASE: vikunjatest
+          VIKUNJA_DATABASE_SSLMODE: disable
+          VIKUNJA_DATABASE_HOST: localhost${{ matrix.db == 'paradedb' && ':5433' || '' }}
+          VIKUNJA_AUTH_LDAP_ENABLED: 1
+          VIKUNJA_AUTH_LDAP_HOST: localhost
+          VIKUNJA_AUTH_LDAP_USETLS: 0
+          VIKUNJA_AUTH_LDAP_BASEDN: dc=planetexpress,dc=com
+          VIKUNJA_AUTH_LDAP_BINDDN: uid=gitea,ou=service,dc=planetexpress,dc=com
+          VIKUNJA_AUTH_LDAP_BINDPASSWORD: password
+          VIKUNJA_AUTH_LDAP_USERFILTER: "(&(objectclass=inetorgperson)(uid=%s))"
+          VIKUNJA_SERVICE_PUBLICURL: http://127.0.0.1:3456
+        run: |
+          mkdir -p frontend/dist
+          touch frontend/dist/index.html
+          chmod +x mage-static
+          ./mage-static test:${{ matrix.test }}
+
+  test-caldav:
+    runs-on: ubuntu-latest
+    needs:
+      - mage
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download Mage Binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mage_bin
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - name: test
+        run: |
+          mkdir -p frontend/dist
+          touch frontend/dist/index.html
+          chmod +x mage-static
+          ./mage-static test:caldav
+
+  test-e2e-api:
+    runs-on: ubuntu-latest
+    needs:
+      - mage
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download Mage Binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mage_bin
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - name: test
+        run: |
+          mkdir -p frontend/dist
+          touch frontend/dist/index.html
+          chmod +x mage-static
+          ./mage-static test:e2e-api
+
+  test-s3-integration:
+    runs-on: ubuntu-latest
+    needs:
+      - mage
+    services:
+      test-minio:
+        image: bitnamilegacy/minio:latest@sha256:451fe6858cb770cc9d0e77ba811ce287420f781c7c1b806a386f6896471a349c
+        env:
+          MINIO_ROOT_USER: vikunja
+          MINIO_ROOT_PASSWORD: vikunjatest
+          MINIO_DEFAULT_BUCKETS: vikunja-test
+        ports:
+          - 9000:9000
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download Mage Binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: mage_bin
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - name: test S3 file storage integration
+        env:
+          VIKUNJA_TESTS_USE_CONFIG: 1
+          VIKUNJA_DATABASE_TYPE: sqlite
+          VIKUNJA_FILES_TYPE: s3
+          VIKUNJA_FILES_S3_ENDPOINT: http://localhost:9000
+          VIKUNJA_FILES_S3_BUCKET: vikunja-test
+          VIKUNJA_FILES_S3_REGION: us-east-1
+          VIKUNJA_FILES_S3_ACCESSKEY: vikunja
+          VIKUNJA_FILES_S3_SECRETKEY: vikunjatest
+          VIKUNJA_FILES_S3_USEPATHSTYLE: true
+          VIKUNJA_SERVICE_PUBLICURL: http://127.0.0.1:3456
+        run: |
+          mkdir -p frontend/dist
+          touch frontend/dist/index.html
+          chmod +x mage-static
+          # Run only the S3 file storage integration tests
+          ./mage-static test:filter "TestFileStorageIntegration"
+
+  frontend-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-frontend
+      - name: Lint
+        working-directory: frontend
+        run: pnpm lint
+
+  frontend-stylelint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-frontend
+      - name: Lint styles
+        working-directory: frontend
+        run: pnpm lint:styles
+
+  frontend-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-frontend
+      - name: Typecheck
+        continue-on-error: true
+        working-directory: frontend
+        run: pnpm typecheck
+
+  test-frontend-unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-frontend
+      - name: Run unit tests
+        working-directory: frontend
+        run: pnpm test:unit
+
+  frontend-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: ./.github/actions/setup-frontend
+      - name: Git describe
+        id: ghd
+        uses: proudust/gh-describe@80412be8ce0e77d8afba6b340e34790bc772aa45 # v2.2.0
+      - name: Inject frontend version
+        working-directory: frontend
+        run: |
+          echo "{\"VERSION\": \"${{ steps.ghd.outputs.describe }}\"}" > src/version.json
+      - name: Build frontend
+        working-directory: frontend
+        run: pnpm build
+      - name: Store Frontend
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: frontend_dist
+          path: ./frontend/dist
+
+  test-veans-e2e:
+    runs-on: ubuntu-latest
+    needs:
+      - api-build
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download Vikunja Binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: vikunja_bin
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: stable
+      - name: Install mage
+        # The cached mage-static artifact has the parent magefile compiled
+        # in — we need a generic mage binary to pick up veans/magefile.go.
+        run: go install github.com/magefile/mage@v1.17.2
+      - run: chmod +x ./vikunja
+      - name: Run veans e2e against ephemeral Vikunja
+        env:
+          VIKUNJA_SERVICE_INTERFACE: ":3456"
+          VIKUNJA_SERVICE_PUBLICURL: "http://127.0.0.1:3456/"
+          VIKUNJA_SERVICE_JWTSECRET: "veans-e2e-jwt-secret-do-not-use-in-production"
+          # Enables PATCH /api/v1/test/{table} — the e2e suite seeds its
+          # own admin via this endpoint (see veans/e2e/helpers.go), same
+          # mechanism the playwright suite uses.
+          VIKUNJA_SERVICE_TESTINGTOKEN: averyLongSecretToSe33dtheDB
+          VIKUNJA_DATABASE_TYPE: sqlite
+          VIKUNJA_DATABASE_PATH: memory
+          VIKUNJA_LOG_LEVEL: WARNING
+          VIKUNJA_MAILER_ENABLED: "false"
+          VIKUNJA_REDIS_ENABLED: "false"
+          VIKUNJA_RATELIMIT_NOAUTHLIMIT: "1000"
+          VEANS_E2E_API_URL: http://127.0.0.1:3456
+          # Same value as VIKUNJA_SERVICE_TESTINGTOKEN above — pass-through
+          # so the test harness can authenticate against /api/v1/test/.
+          VEANS_E2E_TESTING_TOKEN: averyLongSecretToSe33dtheDB
+        run: |
+          set -e
+          # Boot the prebuilt API and tests in one shell — backgrounded
+          # processes don't survive step boundaries on GH runners.
+          nohup ./vikunja web > /tmp/vikunja.log 2>&1 &
+          API_PID=$!
+          trap "kill $API_PID 2>/dev/null || true" EXIT
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:3456/api/v1/info >/dev/null 2>&1; then
+              echo "API ready after ${i}s"
+              break
+            fi
+            sleep 1
+          done
+          if ! curl -sf http://127.0.0.1:3456/api/v1/info >/dev/null; then
+            echo "::error::API failed to start; log:"
+            cat /tmp/vikunja.log
+            exit 1
+          fi
+          # `mage test:e2e` builds the binary once and exports VEANS_BINARY
+          # so each subtest reuses it (plain `mage test` would rebuild per
+          # test via buildOrLocate()). The suite seeds its own admin
+          # internally — no curl seeding here.
+          (cd veans && mage test:e2e)
+      - name: Upload API log on failure
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: veans-e2e-vikunja-log
+          path: /tmp/vikunja.log
+          retention-days: 7
+
+  test-frontend-e2e-playwright:
+    runs-on: ubuntu-latest
+    needs:
+      - api-build
+      - frontend-build
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6]
+        total-shards: [6]
+    services:
+      dex:
+        image: ghcr.io/go-vikunja/dex-testing:main@sha256:d401c06a9f8fd36ece446a07499b827232af7f21eb36872a76c9eac4d0c77bab
+        ports:
+          - 5556:5556
+    container:
+      image: mcr.microsoft.com/playwright:v1.62.1-jammy@sha256:b3251f7ff1a9fa559a28d1c67eaa15fc1a9800f7845e82756caea7842967f615
+      options: --user 1001
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Download Vikunja Binary
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: vikunja_bin
+      - uses: ./.github/actions/setup-frontend
+        with:
+          install-e2e-binaries: false # Playwright browsers already in container
+      - name: Download Frontend
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: frontend_dist
+          path: ./frontend/dist
+      - name: Inject testing flag into index.html
+        run: |
+          sed -i 's/<head>/<head><script>window.TESTING=true;<\/script>/' ./frontend/dist/index.html
+      - run: chmod +x ./vikunja
+      - name: Run Playwright tests
+        timeout-minutes: 20
+        working-directory: frontend
+        run: |
+          pnpm run preview:vikunja &
+          pnpm run preview &
+
+          # Wait for services to be ready (using GET method)
+          pnpx wait-on http-get://127.0.0.1:4173 http-get://127.0.0.1:3456/api/v1/info --timeout 60000
+
+          pnpm run test:e2e --shard=${{ matrix.shard }}/${{ matrix.total-shards }}
+        env:
+          PLAYWRIGHT_SKIP_VALIDATE_HOST_REQUIREMENTS: 1
+          TEST_SECRET: averyLongSecretToSe33dtheDB
+          VIKUNJA_SERVICE_TESTINGTOKEN: averyLongSecretToSe33dtheDB
+          VIKUNJA_LOG_LEVEL: DEBUG
+          VIKUNJA_CORS_ENABLE: 1
+          VIKUNJA_SERVICE_PUBLICURL: http://127.0.0.1:3456
+          VIKUNJA_DATABASE_PATH: memory
+          VIKUNJA_DATABASE_TYPE: sqlite
+          VIKUNJA_RATELIMIT_NOAUTHLIMIT: 1000
+          VIKUNJA_AUTH_OPENID_ENABLED: 1
+          VIKUNJA_AUTH_OPENID_PROVIDERS_DEX_NAME: Dex
+          VIKUNJA_AUTH_OPENID_PROVIDERS_DEX_AUTHURL: http://dex:5556
+          VIKUNJA_AUTH_OPENID_PROVIDERS_DEX_CLIENTID: vikunja
+          VIKUNJA_AUTH_OPENID_PROVIDERS_DEX_CLIENTSECRET: secret
+      - name: Upload Playwright Report
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: playwright-report-${{ matrix.shard }}
+          path: frontend/playwright-report/
+          retention-days: 30
+      - name: Upload Test Results
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: playwright-test-results-${{ matrix.shard }}
+          path: frontend/test-results/
+          retention-days: 30

@@ -1,0 +1,27 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": [
+    "env.d.ts",
+    "env.config.d.ts",
+    "src/**/*.d.ts",
+    "src/**/*",
+    "src/**/*.vue",
+    "src/**/*.json",
+    "tailwind.config.js"
+  ],
+  "exclude": ["src/**/__tests__/*"],
+  "compilerOptions": {
+    "composite": true,
+    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
+    "lib": ["ESNext", "DOM", "DOM.Iterable", "WebWorker"],
+
+    "importHelpers": true,
+    "sourceMap": true,
+    "strictNullChecks": true,
+    
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "types": [],
+  }
+}

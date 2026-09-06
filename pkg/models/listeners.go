@@ -1,0 +1,1794 @@
+// Vikunja is a to-do list application to facilitate your life.
+// Copyright 2018-present Vikunja and contributors. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+package models
+
+import (
+	"encoding/json"
+	"fmt"
+	"strconv"
+	"time"
+
+	"code.vikunja.io/api/pkg/audit"
+	"code.vikunja.io/api/pkg/config"
+	"code.vikunja.io/api/pkg/db"
+	"code.vikunja.io/api/pkg/events"
+	"code.vikunja.io/api/pkg/log"
+	"code.vikunja.io/api/pkg/notifications"
+	"code.vikunja.io/api/pkg/user"
+
+	"github.com/ThreeDotsLabs/watermill/message"
+	"xorm.io/xorm"
+)
+
+// RegisterListeners registers all event listeners
+func RegisterListeners() {
+	events.RegisterListener((&TaskCommentCreatedEvent{}).Name(), &SendTaskCommentNotification{})
+	events.RegisterListener((&TaskAssigneeCreatedEvent{}).Name(), &SendTaskAssignedNotification{})
+	events.RegisterListener((&TaskCreatedEvent{}).Name(), &SendTaskCreatedNotification{})
+	events.RegisterListener((&TaskDeletedEvent{}).Name(), &SendTaskDeletedNotification{})
+	events.RegisterListener((&ProjectCreatedEvent{}).Name(), &SendProjectCreatedNotification{})
+	events.RegisterListener((&TeamMemberAddedEvent{}).Name(), &SendTeamMemberAddedNotification{})
+	events.RegisterListener((&TeamMemberRemovedEvent{}).Name(), &CleanupTaskAssignmentsAfterTeamRemoval{})
+	events.RegisterListener((&TaskCommentUpdatedEvent{}).Name(), &HandleTaskCommentEditMentions{})
+	events.RegisterListener((&TaskCreatedEvent{}).Name(), &HandleTaskCreateMentions{})
+	events.RegisterListener((&TaskUpdatedEvent{}).Name(), &HandleTaskUpdatedMentions{})
+	events.RegisterListener((&UserDataExportRequestedEvent{}).Name(), &HandleUserDataExport{})
+	events.RegisterListener((&TaskCommentCreatedEvent{}).Name(), &HandleTaskUpdateLastUpdated{})
+	events.RegisterListener((&TaskCommentUpdatedEvent{}).Name(), &HandleTaskUpdateLastUpdated{})
+	events.RegisterListener((&TaskCommentDeletedEvent{}).Name(), &HandleTaskUpdateLastUpdated{})
+	events.RegisterListener((&TaskAssigneeCreatedEvent{}).Name(), &HandleTaskUpdateLastUpdated{})
+	events.RegisterListener((&TaskAssigneeDeletedEvent{}).Name(), &HandleTaskUpdateLastUpdated{})
+	events.RegisterListener((&TaskAttachmentCreatedEvent{}).Name(), &HandleTaskUpdateLastUpdated{})
+	events.RegisterListener((&TaskAttachmentDeletedEvent{}).Name(), &HandleTaskUpdateLastUpdated{})
+	events.RegisterListener((&TaskRelationCreatedEvent{}).Name(), &HandleTaskUpdateLastUpdated{})
+	events.RegisterListener((&TaskRelationDeletedEvent{}).Name(), &HandleTaskUpdateLastUpdated{})
+	events.RegisterListener((&TasksBatchCreatedEvent{}).Name(), &UpdateTasksBatchInSavedFilterViews{})
+	events.RegisterListener((&TaskUpdatedEvent{}).Name(), &UpdateTaskInSavedFilterViews{})
+	events.RegisterListener((&TaskCommentCreatedEvent{}).Name(), &MarkTaskUnreadOnComment{})
+	if config.WebhooksEnabled.GetBool() {
+		RegisterEventForWebhook(&TaskCreatedEvent{})
+		RegisterEventForWebhook(&TaskUpdatedEvent{})
+		RegisterEventForWebhook(&TaskDeletedEvent{})
+		RegisterEventForWebhook(&TaskAssigneeCreatedEvent{})
+		RegisterEventForWebhook(&TaskAssigneeDeletedEvent{})
+		RegisterEventForWebhook(&TaskCommentCreatedEvent{})
+		RegisterEventForWebhook(&TaskCommentUpdatedEvent{})
+		RegisterEventForWebhook(&TaskCommentDeletedEvent{})
+		RegisterEventForWebhook(&TaskAttachmentCreatedEvent{})
+		RegisterEventForWebhook(&TaskAttachmentDeletedEvent{})
+		RegisterEventForWebhook(&TaskRelationCreatedEvent{})
+		RegisterEventForWebhook(&TaskRelationDeletedEvent{})
+		RegisterEventForWebhook(&ProjectUpdatedEvent{})
+		RegisterEventForWebhook(&ProjectDeletedEvent{})
+		RegisterEventForWebhook(&ProjectSharedWithUserEvent{})
+		RegisterEventForWebhook(&ProjectSharedWithTeamEvent{})
+		RegisterUserDirectedEventForWebhook(&TaskReminderFiredEvent{})
+		RegisterUserDirectedEventForWebhook(&TaskOverdueEvent{})
+		RegisterUserDirectedEventForWebhook(&TasksOverdueEvent{})
+
+		// Internal delivery listener — one message per webhook with its own retry lifecycle
+		events.RegisterListener((&WebhookDeliveryEvent{}).Name(), &WebhookDeliveryListener{})
+	}
+	if config.AuditEnabled.GetBool() {
+		registerEventsForAuditLogging()
+	}
+}
+
+func auditActorFromUser(u *user.User) audit.Actor {
+	if u == nil {
+		return audit.SystemActor()
+	}
+	return audit.ActorFromDoerID(u.ID)
+}
+
+// registerEventsForAuditLogging opts events into audit logging. This block is
+// the catalog of the entire audited surface — an event without a registration
+// here is not audited.
+func registerEventsForAuditLogging() {
+	// Auth boundary
+	audit.RegisterEventForAudit(func(e *user.LoginSucceededEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionLoginSucceeded,
+			Actor:  audit.UserActor(e.User.ID),
+			Target: audit.UserTarget(e.User.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *user.LoginFailedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:  audit.ActionLoginFailed,
+			Actor:   audit.UserActor(e.User.ID),
+			Target:  audit.UserTarget(e.User.ID),
+			Outcome: audit.OutcomeFailure,
+			Reason:  "wrong password",
+		}
+	})
+	audit.RegisterEventForAudit(func(e *user.LogoutEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionLogout,
+			Actor:  audit.UserActor(e.UserID),
+			Target: audit.UserTarget(e.UserID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *APITokenIssuedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionAPITokenIssued,
+			Actor:    audit.UserActor(e.DoerID),
+			Target:   audit.APITokenTarget(e.TokenID),
+			Metadata: map[string]any{"owner_id": e.OwnerID},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *APITokenRevokedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionAPITokenRevoked,
+			Actor:  audit.UserActor(e.DoerID),
+			Target: audit.APITokenTarget(e.TokenID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *APITokenUsedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionAPITokenUsed,
+			Actor:  audit.UserActor(e.OwnerID),
+			Target: audit.APITokenTarget(e.TokenID),
+		}
+	})
+
+	// Users
+	audit.RegisterEventForAudit(func(e *user.CreatedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionUserCreated,
+			Actor:  audit.UserActor(e.User.ID),
+			Target: audit.UserTarget(e.User.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *UserDataExportRequestedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionUserDataExportRequested,
+			Actor:  audit.UserActor(e.User.ID),
+			Target: audit.UserTarget(e.User.ID),
+		}
+	})
+
+	// Tasks
+	audit.RegisterEventForAudit(func(e *TaskCreatedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionTaskCreated,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.TaskTarget(e.Task.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TaskUpdatedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionTaskUpdated,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.TaskTarget(e.Task.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TaskDeletedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionTaskDeleted,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.TaskTarget(e.Task.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TaskAssigneeCreatedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionTaskAssigneeAdded,
+			Actor:    auditActorFromUser(e.Doer),
+			Target:   audit.TaskTarget(e.Task.ID),
+			Metadata: map[string]any{"assignee_id": e.Assignee.ID},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TaskAssigneeDeletedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionTaskAssigneeRemoved,
+			Actor:    auditActorFromUser(e.Doer),
+			Target:   audit.TaskTarget(e.Task.ID),
+			Metadata: map[string]any{"assignee_id": e.Assignee.ID},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TaskCommentCreatedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionTaskCommentCreated,
+			Actor:    auditActorFromUser(e.Doer),
+			Target:   audit.TaskTarget(e.Task.ID),
+			Metadata: map[string]any{"comment_id": e.Comment.ID},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TaskCommentUpdatedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionTaskCommentUpdated,
+			Actor:    auditActorFromUser(e.Doer),
+			Target:   audit.TaskTarget(e.Task.ID),
+			Metadata: map[string]any{"comment_id": e.Comment.ID},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TaskCommentDeletedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionTaskCommentDeleted,
+			Actor:    auditActorFromUser(e.Doer),
+			Target:   audit.TaskTarget(e.Task.ID),
+			Metadata: map[string]any{"comment_id": e.Comment.ID},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TaskAttachmentCreatedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionTaskAttachmentCreated,
+			Actor:    auditActorFromUser(e.Doer),
+			Target:   audit.TaskTarget(e.Task.ID),
+			Metadata: map[string]any{"attachment_id": e.Attachment.ID},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TaskAttachmentDeletedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionTaskAttachmentDeleted,
+			Actor:    auditActorFromUser(e.Doer),
+			Target:   audit.TaskTarget(e.Task.ID),
+			Metadata: map[string]any{"attachment_id": e.Attachment.ID},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TaskRelationCreatedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionTaskRelationCreated,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.TaskTarget(e.Task.ID),
+			Metadata: map[string]any{
+				"other_task_id": e.Relation.OtherTaskID,
+				"relation_kind": e.Relation.RelationKind,
+			},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TaskRelationDeletedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionTaskRelationDeleted,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.TaskTarget(e.Task.ID),
+			Metadata: map[string]any{
+				"other_task_id": e.Relation.OtherTaskID,
+				"relation_kind": e.Relation.RelationKind,
+			},
+		}
+	})
+
+	// Projects
+	audit.RegisterEventForAudit(func(e *ProjectCreatedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionProjectCreated,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.ProjectTarget(e.Project.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *ProjectUpdatedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionProjectUpdated,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.ProjectTarget(e.Project.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *ProjectDeletedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionProjectDeleted,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.ProjectTarget(e.Project.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *ProjectSharedWithUserEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionProjectSharedWithUser,
+			Actor:    auditActorFromUser(e.Doer),
+			Target:   audit.ProjectTarget(e.Project.ID),
+			Metadata: map[string]any{"user_id": e.User.ID},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *ProjectSharedWithTeamEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionProjectSharedWithTeam,
+			Actor:    auditActorFromUser(e.Doer),
+			Target:   audit.ProjectTarget(e.Project.ID),
+			Metadata: map[string]any{"team_id": e.Team.ID},
+		}
+	})
+
+	// Teams
+	audit.RegisterEventForAudit(func(e *TeamCreatedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionTeamCreated,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.TeamTarget(e.Team.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TeamDeletedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionTeamDeleted,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.TeamTarget(e.Team.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TeamMemberAddedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionTeamMemberAdded,
+			Actor:    auditActorFromUser(e.Doer),
+			Target:   audit.TeamTarget(e.Team.ID),
+			Metadata: map[string]any{"member_id": e.Member.ID},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *TeamMemberRemovedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionTeamMemberRemoved,
+			Actor:    auditActorFromUser(e.Doer),
+			Target:   audit.TeamTarget(e.Team.ID),
+			Metadata: map[string]any{"member_id": e.Member.ID},
+		}
+	})
+
+	// Admin actions
+	audit.RegisterEventForAudit(func(e *AdminUserCreatedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionAdminUserCreated,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.UserTarget(e.User.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *AdminUserAdminGrantedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionAdminUserAdminGranted,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.UserTarget(e.User.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *AdminUserAdminRevokedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionAdminUserAdminRevoked,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.UserTarget(e.User.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *AdminUserStatusChangedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionAdminUserStatusChanged,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.UserTarget(e.User.ID),
+			Metadata: map[string]any{
+				"old_status": e.OldStatus,
+				"new_status": e.NewStatus,
+			},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *AdminUserPasswordSetEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionAdminUserPasswordSet,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.UserTarget(e.User.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *AdminUserPasswordResetSentEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionAdminUserPasswordResetSent,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.UserTarget(e.User.ID),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *AdminUserDeletedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:   audit.ActionAdminUserDeleted,
+			Actor:    auditActorFromUser(e.Doer),
+			Target:   audit.UserTarget(e.User.ID),
+			Metadata: map[string]any{"mode": e.Mode},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *AdminProjectOwnerChangedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionAdminProjectOwnerChanged,
+			Actor:  auditActorFromUser(e.Doer),
+			Target: audit.ProjectTarget(e.Project.ID),
+			Metadata: map[string]any{
+				"old_owner_id": e.OldOwnerID,
+				"new_owner_id": e.NewOwnerID,
+			},
+		}
+	})
+	audit.RegisterEventForAudit(func(e *AdminUsersListedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action: audit.ActionAdminUsersListed,
+			Actor:  auditActorFromUser(e.Doer),
+		}
+	})
+	audit.RegisterEventForAudit(func(e *AdminAccessDeniedEvent) *audit.Entry {
+		return &audit.Entry{
+			Action:  audit.ActionAdminAccessDenied,
+			Actor:   auditActorFromUser(e.Doer),
+			Outcome: audit.OutcomeFailure,
+			Reason:  "not an instance admin",
+			Metadata: map[string]any{
+				"method": e.Method,
+				"path":   e.Path,
+			},
+		}
+	})
+}
+
+//////
+// Task Events
+
+// ensureTaskIdentifier fills in the identifier the simple task getters behind
+// event payloads leave empty.
+func ensureTaskIdentifier(s *xorm.Session, task *Task) error {
+	if task == nil || task.Identifier != "" {
+		return nil
+	}
+
+	project, err := GetProjectSimpleByID(s, task.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	task.setIdentifier(project)
+	return nil
+}
+
+func notifyMentionedUsers(sess *xorm.Session, task *Task, text string, n notifications.NotificationWithSubject) (users map[int64]*user.User, err error) {
+	users, err = FindMentionedUsersInText(sess, text)
+	if err != nil {
+		return
+	}
+
+	if len(users) == 0 {
+		return
+	}
+
+	log.Debugf("Processing %d mentioned users for text %d", len(users), n.SubjectID())
+
+	var notified int
+	for _, u := range users {
+		can, _, err := (&Task{ID: task.ID}).CanRead(sess, u)
+		if err != nil {
+			return users, err
+		}
+
+		if !can {
+			continue
+		}
+
+		// Don't notify a user if they were already notified
+		dbn, err := notifications.GetNotificationsForNameAndUser(sess, u.ID, n.Name(), n.SubjectID())
+		if err != nil {
+			return users, err
+		}
+
+		if len(dbn) > 0 {
+			continue
+		}
+
+		err = notifications.Notify(u, n, sess)
+		if err != nil {
+			return users, err
+		}
+		notified++
+	}
+
+	log.Debugf("Notified %d mentioned users for text %d", notified, n.SubjectID())
+
+	return
+}
+
+// SendTaskCommentNotification  represents a listener
+type SendTaskCommentNotification struct {
+}
+
+// Name defines the name for the SendTaskCommentNotification listener
+func (s *SendTaskCommentNotification) Name() string {
+	return "task.comment.notification.send"
+}
+
+// Handle is executed when the event SendTaskCommentNotification listens on is fired
+func (s *SendTaskCommentNotification) Handle(msg *message.Message) (err error) {
+	event := &TaskCommentCreatedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	sess := db.NewSession()
+	defer sess.Close()
+
+	project, err := GetProjectSimpleByID(sess, event.Task.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	event.Task.setIdentifier(project)
+
+	n := &TaskCommentNotification{
+		Doer:      event.Doer,
+		Task:      event.Task,
+		Comment:   event.Comment,
+		Mentioned: true,
+		Project:   project,
+	}
+	mentionedUsers, err := notifyMentionedUsers(sess, event.Task, event.Comment.Comment, n)
+	if err != nil {
+		return err
+	}
+
+	// Authors of comments quoted via <blockquote data-comment-id="…"> are
+	// treated as implicit mentions, sharing the same notification, dedup,
+	// permission and subscription logic.
+	quotedAuthors, err := findQuotedCommentAuthors(sess, event.Task.ID, event.Doer.ID, event.Comment.Comment)
+	if err != nil {
+		return err
+	}
+	for _, u := range quotedAuthors {
+		if _, has := mentionedUsers[u.ID]; has {
+			continue
+		}
+
+		can, _, err := (&Task{ID: event.Task.ID}).CanRead(sess, u)
+		if err != nil {
+			return err
+		}
+		if !can {
+			continue
+		}
+
+		dbn, err := notifications.GetNotificationsForNameAndUser(sess, u.ID, n.Name(), n.SubjectID())
+		if err != nil {
+			return err
+		}
+		if len(dbn) > 0 {
+			continue
+		}
+
+		err = notifications.Notify(u, n, sess)
+		if err != nil {
+			return err
+		}
+
+		if mentionedUsers == nil {
+			mentionedUsers = make(map[int64]*user.User)
+		}
+		mentionedUsers[u.ID] = u
+	}
+
+	subscribers, err := GetSubscriptionsForEntity(sess, SubscriptionEntityTask, event.Task.ID)
+	if err != nil {
+		return err
+	}
+
+	log.Debugf("Sending task comment notifications to %d subscribers for task %d", len(subscribers), event.Task.ID)
+
+	for _, subscriber := range subscribers {
+		if subscriber.UserID == event.Doer.ID {
+			continue
+		}
+
+		if _, has := mentionedUsers[subscriber.UserID]; has {
+			continue
+		}
+
+		n := &TaskCommentNotification{
+			Doer:    event.Doer,
+			Task:    event.Task,
+			Comment: event.Comment,
+			Project: project,
+		}
+		err = notifications.Notify(subscriber.User, n, sess)
+		if err != nil {
+			// Return so the event is retried: on SQLite the insert can hit
+			// SQLITE_BUSY_SNAPSHOT when a sibling listener wrote first.
+			_ = sess.Rollback()
+			return err
+		}
+	}
+
+	return sess.Commit()
+}
+
+// HandleTaskCommentEditMentions  represents a listener
+type HandleTaskCommentEditMentions struct {
+}
+
+// Name defines the name for the HandleTaskCommentEditMentions listener
+func (s *HandleTaskCommentEditMentions) Name() string {
+	return "handle.task.comment.edit.mentions"
+}
+
+// Handle is executed when the event HandleTaskCommentEditMentions listens on is fired
+func (s *HandleTaskCommentEditMentions) Handle(msg *message.Message) (err error) {
+	event := &TaskCommentUpdatedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	if event.Task == nil || event.Comment == nil {
+		return nil
+	}
+
+	sess := db.NewSession()
+	defer sess.Close()
+
+	project, err := GetProjectSimpleByID(sess, event.Task.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	event.Task.setIdentifier(project)
+
+	n := &TaskCommentNotification{
+		Doer:      event.Doer,
+		Task:      event.Task,
+		Comment:   event.Comment,
+		Mentioned: true,
+		Project:   project,
+	}
+	_, err = notifyMentionedUsers(sess, event.Task, event.Comment.Comment, n)
+	if err != nil {
+		return err
+	}
+	return sess.Commit()
+}
+
+// SendTaskAssignedNotification  represents a listener
+type SendTaskAssignedNotification struct {
+}
+
+// Name defines the name for the SendTaskAssignedNotification listener
+func (s *SendTaskAssignedNotification) Name() string {
+	return "task.assigned.notification.send"
+}
+
+// Handle is executed when the event SendTaskAssignedNotification listens on is fired
+func (s *SendTaskAssignedNotification) Handle(msg *message.Message) (err error) {
+	event := &TaskAssigneeCreatedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	sess := db.NewSession()
+	defer sess.Close()
+
+	subscribers, err := GetSubscriptionsForEntity(sess, SubscriptionEntityTask, event.Task.ID)
+	if err != nil {
+		return err
+	}
+
+	log.Debugf("Sending task assigned notifications to %d subscribers for task %d", len(subscribers), event.Task.ID)
+
+	task, err := GetTaskByIDSimple(sess, event.Task.ID)
+	if err != nil {
+		return err
+	}
+
+	project, err := GetProjectSimpleByID(sess, task.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	task.setIdentifier(project)
+
+	notifiedUsers := make(map[int64]bool)
+
+	for _, subscriber := range subscribers {
+		if subscriber.UserID == event.Doer.ID {
+			continue
+		}
+
+		if notifiedUsers[subscriber.UserID] {
+			// Users may be subscribed to the task and the project itself, which leads to double notifications
+			continue
+		}
+
+		n := &TaskAssignedNotification{
+			Doer:     event.Doer,
+			Task:     &task,
+			Assignee: event.Assignee,
+			Target:   subscriber.User,
+			Project:  project,
+		}
+		err = notifications.Notify(subscriber.User, n, sess)
+		if err != nil {
+			_ = sess.Rollback()
+			return err
+		}
+
+		notifiedUsers[subscriber.UserID] = true
+	}
+
+	return sess.Commit()
+}
+
+// SendTaskCreatedNotification  represents a listener
+type SendTaskCreatedNotification struct {
+}
+
+// Name defines the name for the SendTaskCreatedNotification listener
+func (s *SendTaskCreatedNotification) Name() string {
+	return "task.created.notification.send"
+}
+
+// Handle is executed when the event SendTaskCreatedNotification listens on is fired
+func (s *SendTaskCreatedNotification) Handle(msg *message.Message) (err error) {
+	event := &TaskCreatedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	if event.Task == nil {
+		return nil
+	}
+
+	sess := db.NewSession()
+	defer sess.Close()
+
+	project, err := GetProjectSimpleByID(sess, event.Task.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	event.Task.setIdentifier(project)
+
+	// A task can only be subscribed to through its project at this point, but going
+	// through the task resolves the whole project hierarchy for us.
+	subscribers, err := GetSubscriptionsForEntity(sess, SubscriptionEntityTask, event.Task.ID)
+	if err != nil {
+		return err
+	}
+
+	log.Debugf("Sending task created notifications to %d subscribers for task %d", len(subscribers), event.Task.ID)
+
+	// HandleTaskCreateMentions notifies these separately for the same event
+	mentioned, err := FindMentionedUsersInText(sess, event.Task.Description)
+	if err != nil {
+		return err
+	}
+
+	notifiedUsers := make(map[int64]bool)
+
+	for _, subscriber := range subscribers {
+		if subscriber.UserID == event.Doer.ID {
+			continue
+		}
+
+		if notifiedUsers[subscriber.UserID] {
+			continue
+		}
+
+		if _, has := mentioned[subscriber.UserID]; has {
+			continue
+		}
+
+		n := &TaskCreatedNotification{
+			Doer:    event.Doer,
+			Task:    event.Task,
+			Project: project,
+		}
+		err = notifications.Notify(subscriber.User, n, sess)
+		if err != nil {
+			// Return so the event is retried: on SQLite the insert can hit
+			// SQLITE_BUSY_SNAPSHOT when a sibling listener wrote first.
+			_ = sess.Rollback()
+			return err
+		}
+
+		notifiedUsers[subscriber.UserID] = true
+	}
+
+	return sess.Commit()
+}
+
+// SendTaskDeletedNotification  represents a listener
+type SendTaskDeletedNotification struct {
+}
+
+// Name defines the name for the SendTaskDeletedNotification listener
+func (s *SendTaskDeletedNotification) Name() string {
+	return "task.deleted.notification.send"
+}
+
+// Handle is executed when the event SendTaskDeletedNotification listens on is fired
+func (s *SendTaskDeletedNotification) Handle(msg *message.Message) (err error) {
+	event := &TaskDeletedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	sess := db.NewSession()
+	defer sess.Close()
+
+	subscribers, err := GetSubscriptionsForDeletedTask(sess, event.Task)
+	if err != nil {
+		return err
+	}
+
+	if err := ensureTaskIdentifier(sess, event.Task); err != nil {
+		return err
+	}
+
+	log.Debugf("Sending task deleted notifications to %d subscribers for task %d", len(subscribers), event.Task.ID)
+
+	for _, subscriber := range subscribers {
+		if subscriber.UserID == event.Doer.ID {
+			continue
+		}
+
+		n := &TaskDeletedNotification{
+			Doer: event.Doer,
+			Task: event.Task,
+		}
+		err = notifications.Notify(subscriber.User, n, sess)
+		if err != nil {
+			_ = sess.Rollback()
+			return err
+		}
+	}
+
+	return sess.Commit()
+}
+
+// HandleTaskCreateMentions  represents a listener
+type HandleTaskCreateMentions struct {
+}
+
+// Name defines the name for the HandleTaskCreateMentions listener
+func (s *HandleTaskCreateMentions) Name() string {
+	return "task.created.mentions"
+}
+
+// Handle is executed when the event HandleTaskCreateMentions listens on is fired
+func (s *HandleTaskCreateMentions) Handle(msg *message.Message) (err error) {
+	event := &TaskCreatedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	if event.Task == nil {
+		return nil
+	}
+
+	sess := db.NewSession()
+	defer sess.Close()
+
+	project, err := GetProjectSimpleByID(sess, event.Task.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	event.Task.setIdentifier(project)
+
+	n := &UserMentionedInTaskNotification{
+		Task:    event.Task,
+		Doer:    event.Doer,
+		IsNew:   true,
+		Project: project,
+	}
+	_, err = notifyMentionedUsers(sess, event.Task, event.Task.Description, n)
+	if err != nil {
+		return err
+	}
+	return sess.Commit()
+}
+
+// HandleTaskUpdatedMentions  represents a listener
+type HandleTaskUpdatedMentions struct {
+}
+
+// Name defines the name for the HandleTaskUpdatedMentions listener
+func (s *HandleTaskUpdatedMentions) Name() string {
+	return "task.updated.mentions"
+}
+
+// Handle is executed when the event HandleTaskUpdatedMentions listens on is fired
+func (s *HandleTaskUpdatedMentions) Handle(msg *message.Message) (err error) {
+	event := &TaskUpdatedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	if event.Task == nil {
+		return nil
+	}
+
+	sess := db.NewSession()
+	defer sess.Close()
+
+	project, err := GetProjectSimpleByID(sess, event.Task.ProjectID)
+	if err != nil {
+		return err
+	}
+
+	event.Task.setIdentifier(project)
+
+	n := &UserMentionedInTaskNotification{
+		Task:    event.Task,
+		Doer:    event.Doer,
+		IsNew:   false,
+		Project: project,
+	}
+
+	_, err = notifyMentionedUsers(sess, event.Task, event.Task.Description, n)
+	if err != nil {
+		return err
+	}
+	return sess.Commit()
+}
+
+// HandleTaskUpdateLastUpdated  represents a listener
+type HandleTaskUpdateLastUpdated struct {
+}
+
+// Name defines the name for the HandleTaskUpdateLastUpdated listener
+func (s *HandleTaskUpdateLastUpdated) Name() string {
+	return "handle.task.update.last.updated"
+}
+
+// Handle is executed when the event HandleTaskUpdateLastUpdated listens on is fired
+func (s *HandleTaskUpdateLastUpdated) Handle(msg *message.Message) (err error) {
+	// Using a map here allows us to plug this listener to all kinds of task events
+	event := map[string]interface{}{}
+	err = json.Unmarshal(msg.Payload, &event)
+	if err != nil {
+		return err
+	}
+
+	task, is := event["task"].(map[string]interface{})
+	if !is {
+		log.Errorf("Event payload does not contain task")
+		return
+	}
+
+	taskID, is := task["id"]
+	if !is {
+		log.Errorf("Event payload does not contain a valid task ID")
+		return
+	}
+
+	var taskIDInt int64
+	switch v := taskID.(type) {
+	case int64:
+		taskIDInt = v
+	case int:
+		taskIDInt = int64(v)
+	case int32:
+		taskIDInt = int64(v)
+	case float64:
+		taskIDInt = int64(v)
+	case float32:
+		taskIDInt = int64(v)
+	default:
+		log.Errorf("Event payload does not contain a valid task ID")
+		return
+	}
+
+	sess := db.NewSession()
+	defer sess.Close()
+
+	err = updateTaskLastUpdated(sess, &Task{ID: taskIDInt})
+	if err != nil {
+		return err
+	}
+
+	// Also bump the project so the CalDAV ctag advances on changes to
+	// task sub-entities (relations, comments, attachments, assignees).
+	fullTask, err := GetTaskByIDSimple(sess, taskIDInt)
+	if err != nil {
+		if IsErrTaskDoesNotExist(err) {
+			return sess.Commit()
+		}
+		return err
+	}
+	err = updateProjectLastUpdated(sess, &Project{ID: fullTask.ProjectID})
+	if err != nil {
+		return err
+	}
+
+	return sess.Commit()
+}
+
+// UpdateTaskInSavedFilterViews  represents a listener
+type UpdateTaskInSavedFilterViews struct {
+}
+
+// Name defines the name for the UpdateTaskInSavedFilterViews listener
+func (l *UpdateTaskInSavedFilterViews) Name() string {
+	return "task.set.saved.filter.views"
+}
+
+// Handle is executed when the event UpdateTaskInSavedFilterViews listens on is fired
+func (l *UpdateTaskInSavedFilterViews) Handle(msg *message.Message) (err error) {
+	event := &TaskUpdatedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	if event.Task == nil {
+		return nil
+	}
+
+	return updateTasksInSavedFilterViews([]*Task{event.Task})
+}
+
+// UpdateTasksBatchInSavedFilterViews handles a whole creation batch in one pass, loading the saved filters only once.
+type UpdateTasksBatchInSavedFilterViews struct {
+}
+
+// Name defines the name for the UpdateTasksBatchInSavedFilterViews listener
+func (l *UpdateTasksBatchInSavedFilterViews) Name() string {
+	return "tasks.batch.set.saved.filter.views"
+}
+
+// Handle is executed when the event UpdateTasksBatchInSavedFilterViews listens on is fired
+func (l *UpdateTasksBatchInSavedFilterViews) Handle(msg *message.Message) (err error) {
+	event := &TasksBatchCreatedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	if len(event.Tasks) == 0 {
+		return nil
+	}
+
+	return updateTasksInSavedFilterViews(event.Tasks)
+}
+
+// Only filters of users who can see the task's project can contain it; evaluating the rest is the O(users) cost this avoids.
+func updateTasksInSavedFilterViews(tasks []*Task) (err error) {
+	s := db.NewSession()
+	defer s.Close()
+
+	var tasksMissingProjectID []int64
+	for _, task := range tasks {
+		if task.ProjectID == 0 {
+			tasksMissingProjectID = append(tasksMissingProjectID, task.ID)
+		}
+	}
+	if len(tasksMissingProjectID) > 0 {
+		loaded := []*Task{}
+		err = s.In("id", tasksMissingProjectID).Cols("id", "project_id").Find(&loaded)
+		if err != nil {
+			return err
+		}
+		projectIDByTaskID := make(map[int64]int64, len(loaded))
+		for _, t := range loaded {
+			projectIDByTaskID[t.ID] = t.ProjectID
+		}
+		for _, task := range tasks {
+			if pid, has := projectIDByTaskID[task.ID]; has {
+				task.ProjectID = pid
+			}
+		}
+	}
+
+	accessByProject, userIDs, err := getProjectAccessForTasks(s, tasks)
+	if err != nil || len(userIDs) == 0 {
+		return err
+	}
+
+	filters, timezoneByOwner, err := getActiveSavedFiltersOwnedBy(s, userIDs)
+	if err != nil || len(filters) == 0 {
+		return err
+	}
+
+	kanbanFilterViews, err := getKanbanFilterViewsForFilters(s, filters)
+	if err != nil || len(kanbanFilterViews) == 0 {
+		return err
+	}
+
+	viewsByTask, err := matchTasksToFilterViews(s, tasks, filters, kanbanFilterViews, accessByProject, timezoneByOwner)
+	if err != nil {
+		return err
+	}
+
+	state, err := preloadFilterViewState(s, viewsByTask)
+	if err != nil {
+		return err
+	}
+
+	// Locked once here: per-task locking inside the loop gives no global order.
+	err = lockViewsForPositionUpdate(s, kanbanFilterViews)
+	if err != nil {
+		return fmt.Errorf("could not lock kanban filter views: %w", err)
+	}
+
+	for _, task := range tasks {
+		err = addTaskToFilterViews(s, task, viewsByTask[task.ID], state)
+		if err != nil {
+			return err
+		}
+	}
+
+	return s.Commit()
+}
+
+///////
+// Project Event Listeners
+
+// SendProjectCreatedNotification  represents a listener
+type SendProjectCreatedNotification struct {
+}
+
+// Name defines the name for the SendProjectCreatedNotification listener
+func (s *SendProjectCreatedNotification) Name() string {
+	return "send.project.created.notification"
+}
+
+// Handle is executed when the event SendProjectCreatedNotification listens on is fired
+func (s *SendProjectCreatedNotification) Handle(msg *message.Message) (err error) {
+	event := &ProjectCreatedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	sess := db.NewSession()
+	defer sess.Close()
+
+	subscribers, err := GetSubscriptionsForEntity(sess, SubscriptionEntityProject, event.Project.ID)
+	if err != nil {
+		return err
+	}
+
+	log.Debugf("Sending project created notifications to %d subscribers for project %d", len(subscribers), event.Project.ID)
+
+	for _, subscriber := range subscribers {
+		if subscriber.UserID == event.Doer.ID {
+			continue
+		}
+
+		n := &ProjectCreatedNotification{
+			Doer:    event.Doer,
+			Project: event.Project,
+		}
+		err = notifications.Notify(subscriber.User, n, sess)
+		if err != nil {
+			_ = sess.Rollback()
+			return err
+		}
+	}
+
+	return sess.Commit()
+}
+
+// WebhookListener represents a listener
+type WebhookListener struct {
+	EventName string
+}
+
+// Name defines the name for the WebhookListener listener
+func (wl *WebhookListener) Name() string {
+	return "webhook.listener"
+}
+
+type WebhookPayload struct {
+	EventName string      `json:"event_name"`
+	Time      time.Time   `json:"time"`
+	Data      interface{} `json:"data"`
+}
+
+// WebhookDeliveryListener delivers one webhook per message. It is the
+// consumer for WebhookDeliveryEvent and owns the retry semantics: any
+// error returned from Handle triggers the watermill retry middleware
+// independently for this single delivery, with no effect on other
+// webhooks on the same parent event.
+type WebhookDeliveryListener struct{}
+
+// Name defines the name for the WebhookDeliveryListener listener
+func (wdl *WebhookDeliveryListener) Name() string {
+	return "webhook.delivery.listener"
+}
+
+// Handle is executed when a WebhookDeliveryEvent is fired. It reloads the
+// webhook from the database by id (so secrets, target_url, and basic auth
+// credentials are always current) and performs the HTTP delivery.
+//
+// Special cases:
+//   - If the webhook row no longer exists (deleted between fan-out and
+//     delivery), Handle returns nil so the message is not retried.
+//   - A nil payload is treated as data corruption / version skew and
+//     returned as an error so the message is retried and eventually
+//     parked in the poison queue rather than silently dropped.
+//   - Any other error is returned so the watermill retry middleware
+//     retries this delivery with exponential backoff, and eventually
+//     parks it in the poison queue if all retries fail.
+func (wdl *WebhookDeliveryListener) Handle(msg *message.Message) error {
+	evt := &WebhookDeliveryEvent{}
+	if err := json.Unmarshal(msg.Payload, evt); err != nil {
+		return err
+	}
+
+	if evt.Payload == nil {
+		return fmt.Errorf("webhook delivery event for webhook %d has no payload", evt.WebhookID)
+	}
+
+	s := db.NewSession()
+	defer s.Close()
+
+	webhook := &Webhook{}
+	has, err := s.Where("id = ?", evt.WebhookID).Get(webhook)
+	if err != nil {
+		return err
+	}
+	if !has {
+		log.Debugf("webhook %d no longer exists, skipping delivery of %s", evt.WebhookID, evt.Payload.EventName)
+		return nil
+	}
+
+	if err := webhook.sendWebhookPayload(evt.Payload); err != nil {
+		// A target that is down or rejects the payload is the user's to fix, so
+		// don't report it — but still retry and eventually poison the message.
+		msg.Metadata.Set(events.MetadataSkipErrorReporting, "true")
+		return err
+	}
+
+	return nil
+}
+
+func getIDAsInt64(id interface{}) int64 {
+	if id == nil {
+		return 0
+	}
+
+	switch v := id.(type) {
+	case int64:
+		return v
+	case float64:
+		return int64(v)
+	case float32:
+		return int64(v)
+	case int:
+		return int64(v)
+	case int32:
+		return int64(v)
+	case json.Number:
+		if i, err := v.Int64(); err == nil {
+			return i
+		}
+		if f, err := v.Float64(); err == nil {
+			return int64(f)
+		}
+		return 0
+	case string:
+		if i, err := strconv.ParseInt(v, 10, 64); err == nil {
+			return i
+		}
+		if f, err := strconv.ParseFloat(v, 64); err == nil {
+			return int64(f)
+		}
+		return 0
+	default:
+		return 0
+	}
+}
+
+func getProjectIDFromAnyEvent(eventPayload map[string]interface{}) int64 {
+	if task, has := eventPayload["task"]; has {
+		t := task.(map[string]interface{})
+		if projectID, has := t["project_id"]; has {
+			return getIDAsInt64(projectID)
+		}
+	}
+
+	if project, has := eventPayload["project"]; has {
+		t := project.(map[string]interface{})
+		if projectID, has := t["id"]; has {
+			return getIDAsInt64(projectID)
+		}
+	}
+
+	return 0
+}
+
+func getUserIDFromAnyEvent(eventPayload map[string]interface{}) int64 {
+	if u, has := eventPayload["user"]; has {
+		userMap, ok := u.(map[string]interface{})
+		if !ok {
+			return 0
+		}
+		if userID, has := userMap["id"]; has {
+			return getIDAsInt64(userID)
+		}
+	}
+
+	return 0
+}
+
+func reloadDoerInEvent(s *xorm.Session, event map[string]interface{}) (doerID int64, err error) {
+	doer, has := event["doer"]
+	if !has || doer == nil {
+		return 0, nil
+	}
+
+	// doer can be null in incoming payloads, so guard the type assertion
+	d, ok := doer.(map[string]interface{})
+	if !ok {
+		return 0, nil
+	}
+
+	rawDoerID, has := d["id"]
+	if !has || rawDoerID == nil {
+		return 0, nil
+	}
+
+	doerID = getIDAsInt64(rawDoerID)
+	if doerID <= 0 {
+		return 0, nil
+	}
+
+	fullDoer, err := user.GetUserByID(s, doerID)
+	if err != nil && !user.IsErrUserDoesNotExist(err) {
+		return 0, err
+	}
+	if err == nil {
+		event["doer"] = fullDoer
+	}
+
+	return doerID, nil
+}
+
+func reloadTaskInEvent(s *xorm.Session, event map[string]interface{}, doerID int64) error {
+	task, has := event["task"]
+	if !has || task == nil || doerID == 0 {
+		return nil
+	}
+
+	// guard the type assertion for task as well
+	t, ok := task.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	taskID, has := t["id"]
+	if !has || taskID == nil {
+		return nil
+	}
+
+	id := getIDAsInt64(taskID)
+	if id <= 0 {
+		return nil
+	}
+
+	fullTask := Task{
+		ID: id,
+		Expand: []TaskCollectionExpandable{
+			TaskCollectionExpandBuckets,
+		},
+	}
+	err := fullTask.ReadOne(s, &user.User{ID: doerID})
+	if err != nil && !IsErrTaskDoesNotExist(err) {
+		return err
+	}
+	if err == nil {
+		event["task"] = fullTask
+	}
+
+	return nil
+}
+
+func reloadProjectInEvent(s *xorm.Session, event map[string]interface{}, projectID, doerID int64) error {
+	_, has := event["project"]
+	if !has || doerID == 0 {
+		return nil
+	}
+
+	project, err := GetProjectSimpleByID(s, projectID)
+	if err != nil {
+		if IsErrProjectDoesNotExist(err) {
+			return nil
+		}
+		return err
+	}
+
+	err = project.ReadOne(s, &user.User{ID: doerID})
+	if err != nil && !IsErrProjectDoesNotExist(err) {
+		return err
+	}
+
+	if err == nil {
+		event["project"] = project
+	}
+
+	return nil
+}
+
+func reloadAssigneeInEvent(s *xorm.Session, event map[string]interface{}) error {
+	assignee, has := event["assignee"]
+	if !has || assignee == nil {
+		return nil
+	}
+
+	a, ok := assignee.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	assigneeID := getIDAsInt64(a["id"])
+	if assigneeID <= 0 {
+		return nil
+	}
+
+	fullAssignee, err := user.GetUserByID(s, assigneeID)
+	if err != nil && !user.IsErrUserDoesNotExist(err) {
+		return err
+	}
+	if err == nil {
+		event["assignee"] = fullAssignee
+	}
+
+	return nil
+}
+
+func reloadUserInEvent(s *xorm.Session, event map[string]interface{}) error {
+	u, has := event["user"]
+	if !has || u == nil {
+		return nil
+	}
+
+	userMap, ok := u.(map[string]interface{})
+	if !ok {
+		return nil
+	}
+
+	userID := getIDAsInt64(userMap["id"])
+	if userID <= 0 {
+		return nil
+	}
+
+	fullUser, err := user.GetUserByID(s, userID)
+	if err != nil && !user.IsErrUserDoesNotExist(err) {
+		return err
+	}
+	if err == nil {
+		event["user"] = fullUser
+	}
+
+	return nil
+}
+
+func reloadEventData(s *xorm.Session, event map[string]interface{}, projectID int64) (eventWithData map[string]interface{}, doerID int64, err error) {
+	// Load event data again so that it is always populated in the webhook payload
+
+	doerID, err = reloadDoerInEvent(s, event)
+	if err != nil {
+		return nil, 0, err
+	}
+
+	err = reloadTaskInEvent(s, event, doerID)
+	if err != nil {
+		return nil, doerID, err
+	}
+
+	err = reloadProjectInEvent(s, event, projectID, doerID)
+	if err != nil {
+		return nil, doerID, err
+	}
+
+	err = reloadAssigneeInEvent(s, event)
+	if err != nil {
+		return nil, doerID, err
+	}
+
+	err = reloadUserInEvent(s, event)
+	if err != nil {
+		return nil, doerID, err
+	}
+
+	return event, doerID, nil
+}
+
+// Handle is executed when the event WebhookListener listens on is fired
+func (wl *WebhookListener) Handle(msg *message.Message) (err error) {
+	var event map[string]interface{}
+	err = json.Unmarshal(msg.Payload, &event)
+	if err != nil {
+		return err
+	}
+
+	s := db.NewSession()
+	defer s.Close()
+
+	projectID := getProjectIDFromAnyEvent(event)
+	isUserDirected := IsUserDirectedEvent(wl.EventName)
+
+	// For non-user-directed events, we need a project ID
+	if projectID == 0 && !isUserDirected {
+		log.Debugf("event %s does not contain a project id, not handling webhook", wl.EventName)
+		return nil
+	}
+
+	// Look up project-level webhooks
+	matchingWebhooks := []*Webhook{}
+	if projectID > 0 {
+		parents, err := GetAllParentProjects(s, projectID)
+		if err != nil {
+			return err
+		}
+
+		projectIDs := make([]int64, 0, len(parents)+1)
+		projectIDs = append(projectIDs, projectID)
+		for _, p := range parents {
+			projectIDs = append(projectIDs, p.ID)
+		}
+
+		ws := []*Webhook{}
+		err = s.In("project_id", projectIDs).
+			OrderBy("id ASC").
+			Find(&ws)
+		if err != nil {
+			return err
+		}
+
+		for _, w := range ws {
+			for _, e := range w.Events {
+				if e == wl.EventName {
+					matchingWebhooks = append(matchingWebhooks, w)
+					break
+				}
+			}
+		}
+	}
+
+	// Look up user-level webhooks for user-directed events
+	if isUserDirected {
+		userID := getUserIDFromAnyEvent(event)
+		if userID > 0 {
+			userWebhooks := []*Webhook{}
+			err = s.Where("user_id = ? AND (project_id IS NULL OR project_id = 0)", userID).
+				OrderBy("id ASC").
+				Find(&userWebhooks)
+			if err != nil {
+				return err
+			}
+
+			for _, w := range userWebhooks {
+				for _, e := range w.Events {
+					if e == wl.EventName {
+						matchingWebhooks = append(matchingWebhooks, w)
+						break
+					}
+				}
+			}
+		}
+	}
+
+	if len(matchingWebhooks) == 0 {
+		log.Debugf("Did not find any webhook for the %s event, not sending", wl.EventName)
+		return nil
+	}
+
+	var doerID int64
+	event, doerID, err = reloadEventData(s, event, projectID)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	for _, webhook := range matchingWebhooks {
+		// Clone the event map so each webhook gets its own, isolated payload.
+		// Otherwise adding event["project"] for one webhook would leak into
+		// payloads dispatched for later webhooks.
+		perWebhookEvent := make(map[string]interface{}, len(event)+1)
+		for k, v := range event {
+			perWebhookEvent[k] = v
+		}
+
+		if _, has := perWebhookEvent["project"]; !has && webhook.ProjectID > 0 {
+			project, err := GetProjectSimpleByID(s, webhook.ProjectID)
+			if err != nil && !IsErrProjectDoesNotExist(err) {
+				log.Errorf("Could not load project for webhook %d: %s", webhook.ID, err)
+			}
+			if project != nil {
+				err = project.ReadOne(s, &user.User{ID: doerID})
+				if err != nil && !IsErrProjectDoesNotExist(err) {
+					log.Errorf("Could not load project for webhook %d: %s", webhook.ID, err)
+				}
+				if err == nil {
+					perWebhookEvent["project"] = project
+				}
+			}
+		}
+
+		dispatchErr := events.Dispatch(&WebhookDeliveryEvent{
+			WebhookID: webhook.ID,
+			Payload: &WebhookPayload{
+				EventName: wl.EventName,
+				Time:      now,
+				Data:      perWebhookEvent,
+			},
+		})
+		if dispatchErr != nil {
+			// A dispatch failure here means the in-process event bus is broken —
+			// there is nothing useful to retry per-webhook and we do not want
+			// to fail the parent message (which would re-fan-out and duplicate
+			// any deliveries that did succeed). Log and move on.
+			log.Errorf("Could not dispatch webhook.delivery for webhook %d: %s", webhook.ID, dispatchErr)
+		}
+	}
+
+	return nil
+}
+
+///////
+// Team Events
+
+// CleanupTaskAssignmentsAfterTeamRemoval represents a listener
+type CleanupTaskAssignmentsAfterTeamRemoval struct{}
+
+// Name defines the name of the listener
+func (l *CleanupTaskAssignmentsAfterTeamRemoval) Name() string {
+	return "task.assignees.cleanup.team_removal"
+}
+
+// Handle cleans up task assignments and subscriptions for members removed from teams
+func (l *CleanupTaskAssignmentsAfterTeamRemoval) Handle(msg *message.Message) (err error) {
+	event := &TeamMemberRemovedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	s := db.NewSession()
+	defer s.Close()
+
+	if event == nil || event.Team == nil || event.Member == nil {
+		return nil
+	}
+
+	err = cleanupTaskMembersAfterTeamRemoval(s, event.Team.ID, event.Member.ID)
+	if err != nil {
+		_ = s.Rollback()
+		return err
+	}
+
+	return s.Commit()
+}
+
+// SendTeamMemberAddedNotification  represents a listener
+type SendTeamMemberAddedNotification struct {
+}
+
+// Name defines the name for the SendTeamMemberAddedNotification listener
+func (s *SendTeamMemberAddedNotification) Name() string {
+	return "team.member.added.notification"
+}
+
+// Handle is executed when the event SendTeamMemberAddedNotification listens on is fired
+func (s *SendTeamMemberAddedNotification) Handle(msg *message.Message) (err error) {
+	event := &TeamMemberAddedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	// Don't notify the user themselves
+	if event.Doer.ID == event.Member.ID {
+		return nil
+	}
+
+	return notifications.Notify(event.Member, &TeamMemberAddedNotification{
+		Member: event.Member,
+		Doer:   event.Doer,
+		Team:   event.Team,
+	})
+}
+
+// HandleUserDataExport  represents a listener
+type HandleUserDataExport struct {
+}
+
+// Name defines the name for the HandleUserDataExport listener
+func (s *HandleUserDataExport) Name() string {
+	return "handle.user.data.export"
+}
+
+// Handle is executed when the event HandleUserDataExport listens on is fired
+func (s *HandleUserDataExport) Handle(msg *message.Message) (err error) {
+	event := &UserDataExportRequestedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	log.Debugf("Starting to export user data for user %d...", event.User.ID)
+
+	sess := db.NewSession()
+	defer sess.Close()
+
+	err = ExportUserData(sess, event.User)
+	if err != nil {
+		_ = sess.Rollback()
+		return
+	}
+
+	log.Debugf("Done exporting user data for user %d...", event.User.ID)
+
+	return sess.Commit()
+}
+
+type MarkTaskUnreadOnComment struct {
+}
+
+func (s *MarkTaskUnreadOnComment) Name() string {
+	return "task.comment.mark.unread"
+}
+
+func (s *MarkTaskUnreadOnComment) Handle(msg *message.Message) (err error) {
+	event := &TaskCommentCreatedEvent{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	sess := db.NewSession()
+	defer sess.Close()
+
+	project, err := GetProjectSimpleByID(sess, event.Task.ProjectID)
+	if err != nil {
+		_ = sess.Rollback()
+		return err
+	}
+
+	users, err := ListUsersFromProject(sess, project, event.Doer, "")
+	if err != nil {
+		_ = sess.Rollback()
+		return err
+	}
+
+	// Get existing unread statuses for this task
+	existingUnreadStatuses := []*TaskUnreadStatus{}
+	err = sess.
+		Where("task_id = ?", event.Task.ID).
+		Find(&existingUnreadStatuses)
+	if err != nil {
+		_ = sess.Rollback()
+		return err
+	}
+
+	// Create a set of existing user IDs for quick lookup
+	existingUserIDs := make(map[int64]bool)
+	for _, status := range existingUnreadStatuses {
+		existingUserIDs[status.UserID] = true
+	}
+
+	// Build list of new unread statuses
+	unreadStatuses := []*TaskUnreadStatus{}
+	for _, u := range users {
+		// Skip the comment author and users who already have unread status
+		if u.ID == event.Doer.ID || existingUserIDs[u.ID] {
+			continue
+		}
+		unreadStatuses = append(unreadStatuses, &TaskUnreadStatus{
+			TaskID: event.Task.ID,
+			UserID: u.ID,
+		})
+	}
+
+	// Bulk insert new unread statuses
+	if len(unreadStatuses) > 0 {
+		_, err = sess.Insert(&unreadStatuses)
+		if err != nil {
+			_ = sess.Rollback()
+			return err
+		}
+	}
+
+	return sess.Commit()
+}

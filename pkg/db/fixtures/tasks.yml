@@ -1,0 +1,469 @@
+- id: 1
+  title: 'task #1'
+  description: 'Lorem Ipsum'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 2
+  title: 'task #2 done'
+  done: true
+  created_by_id: 1
+  project_id: 1
+  index: 2
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 3
+  title: 'task #3 high prio'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 3
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+  priority: 100
+- id: 4
+  title: 'task #4 low prio'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 4
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+  priority: 1
+- id: 5
+  title: 'task #5 higher due date'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 5
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+  due_date: 2018-12-01 03:58:44
+- id: 6
+  title: 'task #6 lower due date'
+  description: 'This has something unique'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 6
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+  due_date: 2018-11-30 22:25:24
+- id: 7
+  title: 'task #7 with start date'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 7
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+  start_date: 2018-12-12 07:33:20
+- id: 8
+  title: 'task #8 with end date'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 8
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+  end_date: 2018-12-13 11:20:00
+- id: 9
+  title: 'task #9 with start and end date'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 9
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+  start_date: 2018-12-12 07:33:20
+  end_date: 2018-12-13 11:20:00
+- id: 10
+  title: 'task #10 basic'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 10
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 11
+  title: 'task #11 basic'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 11
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 12
+  title: 'task #12 basic'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 12
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 13
+  title: 'task #13 basic other project'
+  done: false
+  created_by_id: 1
+  project_id: 2
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 14
+  title: 'task #14 basic other project'
+  done: false
+  created_by_id: 5
+  project_id: 5
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 15
+  title: 'task #15'
+  done: false
+  created_by_id: 6
+  project_id: 6
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 16
+  title: 'task #16'
+  done: false
+  created_by_id: 6
+  project_id: 7
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 17
+  title: 'task #17'
+  done: false
+  created_by_id: 6
+  project_id: 8
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 18
+  title: 'task #18'
+  done: false
+  created_by_id: 6
+  project_id: 9
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 19
+  title: 'task #19'
+  done: false
+  created_by_id: 6
+  project_id: 10
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 20
+  title: 'task #20'
+  done: false
+  created_by_id: 6
+  project_id: 11
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 21
+  title: 'task #21'
+  done: false
+  created_by_id: 6
+  project_id: 32
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 22
+  title: 'task #22'
+  done: false
+  created_by_id: 6
+  project_id: 33
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 23
+  title: 'task #23'
+  done: false
+  created_by_id: 6
+  project_id: 34
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 24
+  title: 'task #24'
+  done: false
+  created_by_id: 6
+  project_id: 15
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 25
+  title: 'task #25'
+  done: false
+  created_by_id: 6
+  project_id: 16
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 26
+  title: 'task #26'
+  done: false
+  created_by_id: 6
+  project_id: 17
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 27
+  title: 'task #27 with reminders and start_date'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 18
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+  start_date: 2018-11-30 22:25:24
+- id: 28
+  title: 'task #28 with repeat after, start_date, end_date and due_date'
+  done: false
+  created_by_id: 1
+  repeat_after: 3600
+  project_id: 1
+  index: 13
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+  due_date: 2018-12-02 22:25:24
+  start_date: 2018-11-30 22:25:24
+  end_date: 2018-12-13 11:20:00
+- id: 29
+  title: 'task #29 with parent task (1)'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 14
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 30
+  title: 'task #30 with assignees'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 15
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 31
+  title: 'task #31 with color'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 16
+  hex_color: f0f0f0
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 32
+  title: 'task #32'
+  done: false
+  created_by_id: 1
+  project_id: 3
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 33
+  title: 'task #33 with percent done'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 17
+  percent_done: 0.5
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+  # This task is forbidden for user1
+- id: 34
+  title: 'task #34'
+  done: false
+  created_by_id: 13
+  project_id: 20
+  index: 20
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 35
+  title: 'task #35'
+  done: false
+  created_by_id: 1
+  project_id: 21
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 36
+  title: 'task #36'
+  done: false
+  created_by_id: 1
+  project_id: 22
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+  due_date: 2018-10-30 22:25:24
+- id: 37
+  title: 'task #37'
+  done: false
+  created_by_id: -2
+  project_id: 2
+  index: 2
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 38
+  title: 'task #37 done with due date'
+  done: true
+  created_by_id: 1
+  project_id: 22
+  index: 2
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+  due_date: 2018-10-30 22:25:24
+- id: 39
+  title: 'task #39'
+  created_by_id: 1
+  project_id: 25
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 40
+  uid: 'uid-caldav-test'
+  title: 'Title Caldav Test'
+  description: 'Description Caldav Test'
+  priority: 3
+  done: false
+  created_by_id: 15
+  project_id: 36
+  index: 39
+  due_date: 2023-03-01 15:00:00
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 41
+  uid: 'uid-caldav-test-parent-task'
+  title: 'Parent task for Caldav Test'
+  description: 'Description Caldav Test'
+  priority: 3
+  done: false
+  created_by_id: 15
+  project_id: 36
+  index: 40
+  due_date: 2023-03-01 15:00:00
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 42
+  uid: 'uid-caldav-test-parent-task-2'
+  title: 'Parent task for Caldav Test 2'
+  description: 'Description Caldav Test 2'
+  priority: 3
+  done: false
+  created_by_id: 15
+  project_id: 36
+  index: 41
+  due_date: 2023-03-01 15:00:00
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 43
+  uid: 'uid-caldav-test-child-task'
+  title: 'Child task for Caldav Test'
+  description: 'Description Caldav Test'
+  priority: 3
+  done: false
+  created_by_id: 15
+  project_id: 36
+  index: 42
+  due_date: 2023-03-01 15:00:00
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 44
+  uid: 'uid-caldav-test-child-task-2'
+  title: 'Child task for Caldav Test '
+  description: 'Description Caldav Test'
+  priority: 3
+  done: false
+  created_by_id: 15
+  project_id: 38
+  index: 43
+  due_date: 2023-03-01 15:00:00
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 45
+  uid: 'uid-caldav-test-parent-task-another-list'
+  title: 'Parent task for Caldav Test'
+  description: 'Description Caldav Test'
+  priority: 3
+  done: false
+  created_by_id: 15
+  project_id: 36
+  index: 44
+  due_date: 2023-03-01 15:00:00
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 46
+  uid: 'uid-caldav-test-child-task-another-list'
+  title: 'Child task for Caldav Test '
+  description: 'Description Caldav Test'
+  priority: 3
+  done: false
+  created_by_id: 15
+  project_id: 38
+  index: 45
+  due_date: 2023-03-01 15:00:00
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 47
+  title: 'task #47 with reminders outside window'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 32
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+- id: 48
+  title: 'Landingpages update'
+  description: 'Update all landingpages with new branding'
+  done: false
+  created_by_id: 1
+  project_id: 1
+  index: 33
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+# Task in parent project 41 (hierarchy permission test)
+- id: 49
+  title: 'task #49 in hierarchy parent'
+  done: false
+  created_by_id: 6
+  project_id: 41
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+# Task in child project 42 (hierarchy permission test)
+- id: 50
+  title: 'task #50 in hierarchy child'
+  done: false
+  created_by_id: 6
+  project_id: 42
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+# Soft-deleted task: must never surface anywhere except through Unscoped queries
+- id: 51
+  title: 'task #51 soft deleted'
+  done: false
+  due_date: 2018-11-30 00:00:00
+  created_by_id: 1
+  project_id: 1
+  index: 34
+  deleted_at: 2018-12-01 01:12:04
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04
+# Write target for bot 23 in the #3592 regression.
+- id: 52
+  title: 'task #52 in bot project'
+  done: false
+  created_by_id: 23
+  project_id: 44
+  index: 1
+  created: 2018-12-01 01:12:04
+  updated: 2018-12-01 01:12:04

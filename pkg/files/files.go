@@ -1,0 +1,233 @@
+// Vikunja is a to-do list application to facilitate your life.
+// Copyright 2018-present Vikunja and contributors. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+package files
+
+import (
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"math"
+	"os"
+	"strconv"
+	"time"
+
+	"code.vikunja.io/api/pkg/config"
+	"code.vikunja.io/api/pkg/db"
+	"code.vikunja.io/api/pkg/log"
+
+	"code.vikunja.io/api/pkg/web"
+	"github.com/c2h5oh/datasize"
+	"github.com/gabriel-vasile/mimetype"
+	"xorm.io/xorm"
+)
+
+// File holds all information about a file
+type File struct {
+	ID   int64  `xorm:"bigint autoincr not null unique pk" json:"id" readOnly:"true" doc:"The unique, numeric id of this file."`
+	Name string `xorm:"text not null" json:"name" readOnly:"true" doc:"The original name of the uploaded file."`
+	Mime string `xorm:"text null" json:"mime" readOnly:"true" doc:"The detected mime type of the file."`
+	Size uint64 `xorm:"bigint not null" json:"size" readOnly:"true" doc:"The size of the file in bytes."`
+
+	Created     time.Time `xorm:"created" json:"created" readOnly:"true" doc:"A timestamp when this file was uploaded."`
+	CreatedByID int64     `xorm:"bigint not null" json:"-"`
+
+	File io.ReadCloser `xorm:"-" json:"-"`
+	// This ReadCloser is only used for migration purposes. Use with care!
+	// There is currentlc no better way of doing this.
+	FileContent []byte `xorm:"-" json:"-"`
+}
+
+// TableName is the table name for the files table
+func (*File) TableName() string {
+	return "files"
+}
+
+func (f *File) fileID() string {
+	return strconv.FormatInt(f.ID, 10)
+}
+
+// DeleteBlob removes a stored blob after its database row has been rolled back.
+func DeleteBlob(id int64) error {
+	return storage.Remove(strconv.FormatInt(id, 10))
+}
+
+// LoadFileByID returns a file by its ID
+func (f *File) LoadFileByID() (err error) {
+	f.File, err = storage.Open(f.fileID())
+	if err != nil {
+		// A db row without its blob is a broken install, not a server error.
+		if errors.Is(err, fs.ErrNotExist) {
+			return ErrFileDoesNotExist{FileID: f.ID}
+		}
+		return fmt.Errorf("failed to open file %d: %w", f.ID, err)
+	}
+	return nil
+}
+
+// LoadFileMetaByID loads the file metadata using the caller's session — an engine
+// query under an open transaction needs a second pool connection and can deadlock the pool.
+func (f *File) LoadFileMetaByID(s *xorm.Session) (err error) {
+	exists, err := s.Where("id = ?", f.ID).Get(f)
+	if err != nil {
+		return err
+	}
+	if !exists {
+		return ErrFileDoesNotExist{FileID: f.ID}
+	}
+	return nil
+}
+
+// Create creates a new file from an FileHeader
+func Create(f io.ReadSeeker, realname string, realsize uint64, a web.Auth) (file *File, err error) {
+	mime, err := mimetype.DetectReader(f)
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect mime type: %w", err)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("failed to seek after mime detection: %w", err)
+	}
+	return CreateWithMime(f, realname, realsize, a, mime.String())
+}
+
+// CreateWithSession creates a new file using an existing session to avoid nested transactions
+func CreateWithSession(s *xorm.Session, f io.ReadSeeker, realname string, realsize uint64, a web.Auth) (file *File, err error) {
+	mime, err := mimetype.DetectReader(f)
+	if err != nil {
+		return nil, fmt.Errorf("failed to detect mime type: %w", err)
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, fmt.Errorf("failed to seek after mime detection: %w", err)
+	}
+	return CreateWithMimeAndSession(s, f, realname, realsize, a, mime.String(), true)
+}
+
+// CreateWithMime creates a new file from an FileHeader and sets its mime type
+func CreateWithMime(f io.ReadSeeker, realname string, realsize uint64, a web.Auth, mime string) (file *File, err error) {
+	s := db.NewSession()
+	defer s.Close()
+
+	file, err = CreateWithMimeAndSession(s, f, realname, realsize, a, mime, true)
+	if err != nil {
+		_ = s.Rollback()
+		return
+	}
+
+	return file, s.Commit()
+}
+
+// measureReaderSize returns the byte length of r and leaves r seeked to
+// 0, so the size we check matches what storage backends will write
+// (they also Seek(0, io.SeekStart) before reading).
+func measureReaderSize(r io.ReadSeeker) (uint64, error) {
+	if _, err := r.Seek(0, io.SeekStart); err != nil {
+		return 0, err
+	}
+	end, err := r.Seek(0, io.SeekEnd)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := r.Seek(0, io.SeekStart); err != nil {
+		return 0, err
+	}
+	if end < 0 {
+		return 0, fmt.Errorf("reader end %d is negative", end)
+	}
+	return uint64(end), nil
+}
+
+func CreateWithMimeAndSession(s *xorm.Session, f io.ReadSeeker, realname string, realsize uint64, a web.Auth, mime string, checkFileSizeLimit bool) (file *File, err error) {
+	// Authoritative size comes from the reader, not the caller: the
+	// migration import path accepts attacker-controlled metadata
+	// (GHSA-qh78-rvg3-cv54) and several other callers pass stale values.
+	measured, mErr := measureReaderSize(f)
+	if mErr != nil {
+		return nil, fmt.Errorf("failed to measure file size: %w", mErr)
+	}
+
+	if checkFileSizeLimit {
+		// Overflow-safe: exabyte-range configs would wrap uint64.
+		maxMB := config.GetMaxFileSizeInMBytes()
+		var maxBytes uint64
+		if maxMB > math.MaxUint64/uint64(datasize.MB) {
+			maxBytes = math.MaxUint64
+		} else {
+			maxBytes = maxMB * uint64(datasize.MB)
+		}
+		if measured > maxBytes {
+			return nil, ErrFileIsTooLarge{Size: measured}
+		}
+	}
+
+	// Surface buggy callers that lie about size.
+	if realsize != 0 && realsize != measured {
+		log.Debugf("files.Create: caller-supplied size %d does not match measured size %d for %q",
+			realsize, measured, realname)
+	}
+
+	// We first insert the file into the db to get it's ID
+	file = &File{
+		Name:        realname,
+		Size:        measured,
+		CreatedByID: a.GetID(),
+		Mime:        mime,
+	}
+
+	_, err = s.Insert(file)
+	if err != nil {
+		return
+	}
+
+	// Save the file to storage with its new ID as path
+	err = file.Save(f)
+	return
+}
+
+// Delete removes a file from the DB and the file system.
+// The caller is responsible for committing or rolling back the session.
+func (f *File) Delete(s *xorm.Session) (err error) {
+	deleted, err := s.Where("id = ?", f.ID).Delete(&File{})
+	if err != nil {
+		return err
+	}
+	if deleted == 0 {
+		return ErrFileDoesNotExist{FileID: f.ID}
+	}
+
+	err = storage.Remove(f.fileID())
+	if err != nil {
+		var perr *os.PathError
+		if errors.As(err, &perr) {
+			// Don't fail when removing the file failed
+			log.Errorf("Error deleting file %d: %s", f.ID, err)
+			return nil
+		}
+
+		return err
+	}
+
+	return nil
+}
+
+// Save saves a file to storage
+func (f *File) Save(fcontent io.ReadSeeker) error {
+	err := storage.Write(f.fileID(), fcontent, f.Size)
+	if err != nil {
+		return fmt.Errorf("failed to save file: %w", err)
+	}
+	return nil
+}

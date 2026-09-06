@@ -1,0 +1,48 @@
+name: "vikunja"
+arch: "<arch>"
+platform: "linux"
+version: "<version>"
+description: "Vikunja is an open-source todo application, written in Go. It lets you create lists,tasks and share them via teams or directly between users."
+maintainer: "Vikunja Maintainers <maintainers@vikunja.io>"
+homepage: "https://vikunja.io"
+section: "default"
+priority: "extra"
+license: "AGPLv3"
+depends:
+  - systemd
+rpm:
+  signature:
+    key_file: ${NFPM_GPG_KEY_FILE}
+# apk and archlinux run `scripts.postinstall` on a fresh install only — nfpm
+# maps their upgrade hooks from these packager-specific keys instead. Without
+# them, upgrading on Alpine or Arch runs no maintainer script at all.
+apk:
+  scripts:
+    postupgrade: ./build/after-install-openrc.sh
+archlinux:
+  scripts:
+    postupgrade: ./build/after-install.sh
+overrides:
+  apk:
+    depends:
+      - openrc
+    scripts:
+      postinstall: ./build/after-install-openrc.sh
+contents:
+  - src: <binlocation>
+    dst: /opt/vikunja/vikunja
+  - src: ./config.yml.sample
+    dst: /etc/vikunja/config.yml
+    # noreplace only affects rpm; the other packagers treat it as plain config.
+    type: "config|noreplace"
+  - src: /opt/vikunja/vikunja
+    dst: /usr/local/bin/vikunja
+    type: "symlink"
+  - src: vikunja.service
+    dst: /usr/lib/systemd/system/vikunja.service
+  - src: vikunja.initd
+    dst: /etc/init.d/vikunja
+    type: "config"
+    packager: apk
+scripts:
+  postinstall: ./build/after-install.sh

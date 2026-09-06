@@ -1,0 +1,57 @@
+.idea/
+.idea/*/*
+.idea/httpRequests
+config.yml
+config.yaml
+config.yml.sample
+!docs/config.yml
+!.github/ISSUE_TEMPLATE/config.yml
+!.gitea/ISSUE_TEMPLATE/config.yml
+docs/themes/
+*.db
+*.db-shm
+*.db-wal
+Run
+dist/
+cover.*
+/vikunja
+Test_*
+bin/
+secrets
+*.deb
+debian/
+logs/
+docs/public/
+docs/resources/
+pkg/static/templates_vfsdata.go
+files/
+!pkg/files/
+!pkg/web/files/
+vikunja-dump*
+vendor/
+os-packages/
+mage_output_file.go
+mage-static
+.DS_Store
+/plugins/*
+/plugins-dev/*
+
+# pnpm
+.pnpm-store/
+
+# Devenv
+.devenv*
+devenv.local.nix
+
+# direnv
+.direnv
+
+# pre-commit
+.pre-commit-config.yaml
+
+# AI Tools
+/.claude/settings.local.json
+PLAN.md
+plans/
+/.crush/
+/.playwright-mcp

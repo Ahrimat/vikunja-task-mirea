@@ -1,0 +1,472 @@
+// Vikunja is a to-do list application to facilitate your life.
+// Copyright 2018-present Vikunja and contributors. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+package handler
+
+import (
+	"bytes"
+	_ "image/gif"  // To make sure the decoder used for generating blurHashes recognizes gifs
+	_ "image/jpeg" // To make sure the decoder used for generating blurHashes recognizes jpgs
+	_ "image/png"  // To make sure the decoder used for generating blurHashes recognizes pngs
+
+	"github.com/disintegration/imaging"
+
+	_ "golang.org/x/image/bmp"  // To make sure the decoder used for generating blurHashes recognizes bmps
+	_ "golang.org/x/image/tiff" // To make sure the decoder used for generating blurHashes recognizes tiffs
+	_ "golang.org/x/image/webp" // To make sure the decoder used for generating blurHashes recognizes tiffs
+
+	"image"
+	"io"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+
+	"code.vikunja.io/api/pkg/db"
+	"code.vikunja.io/api/pkg/files"
+	"code.vikunja.io/api/pkg/log"
+	"code.vikunja.io/api/pkg/models"
+	auth2 "code.vikunja.io/api/pkg/modules/auth"
+	"code.vikunja.io/api/pkg/modules/background"
+	"code.vikunja.io/api/pkg/modules/background/unsplash"
+	"code.vikunja.io/api/pkg/modules/background/upload"
+	"code.vikunja.io/api/pkg/modules/imageutils"
+	"code.vikunja.io/api/pkg/web"
+	webfiles "code.vikunja.io/api/pkg/web/files"
+
+	"github.com/bbrks/go-blurhash"
+	"github.com/gabriel-vasile/mimetype"
+	"github.com/labstack/echo/v5"
+	"golang.org/x/image/draw"
+	"xorm.io/xorm"
+)
+
+var allowedImageMimes = []string{
+	"image/jpeg",
+	"image/png",
+	"image/gif",
+	"image/bmp",
+	"image/tiff",
+	"image/webp",
+}
+
+// BackgroundProvider represents a thing which holds a background provider
+// Lets us get a new fresh provider every time we need one.
+type BackgroundProvider struct {
+	Provider func() background.Provider
+}
+
+// SearchBackgrounds is the web handler to search for backgrounds
+func (bp *BackgroundProvider) SearchBackgrounds(c *echo.Context) error {
+	p := bp.Provider()
+
+	err := c.Bind(p)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, "No or invalid model provided: "+err.Error()).Wrap(err)
+	}
+
+	search := c.QueryParam("s")
+	var page int64 = 1
+	pg := c.QueryParam("p")
+	if pg != "" {
+		page, err = strconv.ParseInt(pg, 10, 64)
+		if err != nil {
+			return echo.NewHTTPError(http.StatusBadRequest, "Invalid page number: "+err.Error()).Wrap(err)
+		}
+	}
+
+	s := db.NewSession()
+	defer s.Close()
+
+	result, err := p.Search(s, search, page)
+	if err != nil {
+		_ = s.Rollback()
+		return echo.NewHTTPError(http.StatusBadRequest, "An error occurred: "+err.Error()).Wrap(err)
+	}
+
+	if err := s.Commit(); err != nil {
+		_ = s.Rollback()
+		return echo.NewHTTPError(http.StatusBadRequest, "An error occurred: "+err.Error()).Wrap(err)
+	}
+
+	return c.JSON(http.StatusOK, result)
+}
+
+// This function does all kinds of preparations for setting and uploading a background
+func (bp *BackgroundProvider) setBackgroundPreparations(s *xorm.Session, c *echo.Context) (project *models.Project, auth web.Auth, err error) {
+	auth, err = auth2.GetAuthFromClaims(c)
+	if err != nil {
+		return nil, nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid auth token: "+err.Error()).Wrap(err)
+	}
+
+	projectID, err := strconv.ParseInt(c.Param("project"), 10, 64)
+	if err != nil {
+		return nil, nil, echo.NewHTTPError(http.StatusBadRequest, "Invalid project ID: "+err.Error()).Wrap(err)
+	}
+
+	// Check if the user has the permission to change the project background
+	project = &models.Project{ID: projectID}
+	can, err := project.CanWrite(s, auth)
+	if err != nil {
+		return
+	}
+	if !can {
+		log.Infof("Tried to update project background of project %d while not having the permissions for it (User: %v)", projectID, auth)
+		return project, auth, models.ErrGenericForbidden{}
+	}
+	// Load the project
+	project, err = models.GetProjectSimpleByID(s, project.ID)
+	return
+}
+
+// SetBackground sets an Image as project background
+func (bp *BackgroundProvider) SetBackground(c *echo.Context) error {
+	s := db.NewSession()
+	defer s.Close()
+
+	project, auth, err := bp.setBackgroundPreparations(s, c)
+	if err != nil {
+		_ = s.Rollback()
+		return err
+	}
+
+	p := bp.Provider()
+
+	image := &background.Image{}
+	err = c.Bind(image)
+	if err != nil {
+		_ = s.Rollback()
+		return echo.NewHTTPError(http.StatusBadRequest, "No or invalid model provided: "+err.Error()).Wrap(err)
+	}
+
+	err = p.Set(s, image, project, auth)
+	if err != nil {
+		_ = s.Rollback()
+		return err
+	}
+
+	err = project.ReadOne(s, auth)
+	if err != nil {
+		_ = s.Rollback()
+		return err
+	}
+
+	if err := s.Commit(); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, project)
+}
+
+func CreateBlurHash(srcf io.Reader) (hash string, err error) {
+	src, _, err := image.Decode(srcf)
+	if err != nil {
+		return "", err
+	}
+
+	return CreateBlurHashFromImage(src)
+}
+
+// CreateBlurHashFromImage avoids decoding uploads twice.
+func CreateBlurHashFromImage(src image.Image) (hash string, err error) {
+	dst := image.NewRGBA(image.Rect(0, 0, 32, 32))
+	draw.NearestNeighbor.Scale(dst, dst.Rect, src, src.Bounds(), draw.Over, nil)
+
+	return blurhash.Encode(4, 3, dst)
+}
+
+// UploadBackground uploads a background and passes the id of the uploaded file as an Image to the Set function of the BackgroundProvider.
+func (bp *BackgroundProvider) UploadBackground(c *echo.Context) error {
+	s := db.NewSession()
+	defer s.Close()
+
+	project, auth, err := bp.setBackgroundPreparations(s, c)
+	if err != nil {
+		_ = s.Rollback()
+		return err
+	}
+
+	// Get + upload the image
+	file, err := c.FormFile("background")
+	if err != nil {
+		_ = s.Rollback()
+		return err
+	}
+	srcf, err := file.Open()
+	if err != nil {
+		_ = s.Rollback()
+		return err
+	}
+	defer srcf.Close()
+
+	if err := ValidateAndSaveBackgroundUpload(s, auth, project, srcf, file.Filename, uint64(file.Size)); err != nil {
+		_ = s.Rollback()
+		if IsErrFileIsNoImage(err) {
+			return c.JSON(http.StatusBadRequest, models.Message{Message: "Uploaded file is no image."})
+		}
+		if files.IsErrFileIsTooLarge(err) {
+			return echo.ErrBadRequest
+		}
+		if IsErrFileUnsupportedImageFormat(err) {
+			return c.JSON(http.StatusBadRequest, models.Message{Message: "Unsupported image format. Allowed: " + strings.Join(allowedImageMimes, ",")})
+		}
+		return err
+	}
+
+	if err := s.Commit(); err != nil {
+		_ = s.Rollback()
+		return err
+	}
+
+	return c.JSON(http.StatusOK, project)
+}
+
+// ValidateAndSaveBackgroundUpload is shared by the v1 and v2 upload handlers.
+func ValidateAndSaveBackgroundUpload(s *xorm.Session, auth web.Auth, project *models.Project, srcf io.ReadSeeker, filename string, _ uint64) error {
+	mime, err := mimetype.DetectReader(srcf)
+	if err != nil {
+		return err
+	}
+	if !strings.HasPrefix(mime.String(), "image") {
+		return ErrFileIsNoImage{Mime: mime.String()}
+	}
+	supported := false
+	for _, m := range allowedImageMimes {
+		if mime.Is(m) {
+			supported = true
+			break
+		}
+	}
+	if !supported {
+		return ErrFileUnsupportedImageFormat{Mime: mime.String()}
+	}
+
+	// SaveBackgroundFile rewinds after DetectReader.
+	if _, err := SaveBackgroundFile(s, auth, project, srcf, filename); err != nil {
+		return err
+	}
+
+	return project.ReadOne(s, auth)
+}
+
+func SaveBackgroundFile(s *xorm.Session, auth web.Auth, project *models.Project, srcf io.ReadSeeker, filename string) (storedSize int64, err error) {
+	mime, _ := mimetype.DetectReader(srcf)
+	_, _ = srcf.Seek(0, io.SeekStart)
+
+	// Reject hostile dimensions before decoding (GHSA-4vh2-39rq-rq8j).
+	if _, err := imageutils.ValidateReader(srcf); err != nil {
+		if !imageutils.IsErrImageTooLarge(err) && strings.Contains(err.Error(), "unknown format") {
+			return 0, ErrFileUnsupportedImageFormat{Mime: mime.String()}
+		}
+		return 0, err
+	}
+	_, _ = srcf.Seek(0, io.SeekStart)
+	src, err := imaging.Decode(srcf)
+	if err != nil {
+		if strings.Contains(err.Error(), "unknown format") {
+			return 0, ErrFileUnsupportedImageFormat{Mime: mime.String()}
+		}
+		return 0, err
+	}
+
+	buf := bytes.Buffer{}
+	// Fit bounds both dimensions without upscaling.
+	dst := imaging.Fit(src, background.MaxBackgroundImageHeight, background.MaxBackgroundImageHeight, imaging.Lanczos)
+	err = imaging.Encode(&buf, dst, imaging.JPEG, imaging.JPEGQuality(80))
+	if err != nil {
+		return 0, err
+	}
+	storedSize = int64(buf.Len())
+
+	f, err := files.CreateWithSession(s, bytes.NewReader(buf.Bytes()), filename, uint64(storedSize), auth)
+	if err != nil {
+		return 0, err
+	}
+
+	project.BackgroundBlurHash, err = CreateBlurHashFromImage(src)
+	if err != nil {
+		return 0, err
+	}
+
+	// Save it
+	p := upload.Provider{}
+	img := &background.Image{ID: strconv.FormatInt(f.ID, 10)}
+	if err = p.Set(s, img, project, auth); err != nil {
+		return 0, err
+	}
+	project.BackgroundFileID = f.ID
+	return storedSize, nil
+}
+
+func checkProjectBackgroundRights(s *xorm.Session, c *echo.Context) (project *models.Project, auth web.Auth, err error) {
+	auth, err = auth2.GetAuthFromClaims(c)
+	if err != nil {
+		return nil, auth, echo.NewHTTPError(http.StatusBadRequest, "Invalid auth token: "+err.Error()).Wrap(err)
+	}
+
+	projectID, err := strconv.ParseInt(c.Param("project"), 10, 64)
+	if err != nil {
+		return nil, auth, echo.NewHTTPError(http.StatusBadRequest, "Invalid project ID: "+err.Error()).Wrap(err)
+	}
+
+	// Check if a background for this project exists + Permissions
+	project = &models.Project{ID: projectID}
+	can, _, err := project.CanRead(s, auth)
+	if err != nil {
+		_ = s.Rollback()
+		return nil, auth, err
+	}
+	if !can {
+		_ = s.Rollback()
+		log.Infof("Tried to get project background of project %d while not having the permissions for it (User: %v)", projectID, auth)
+		return nil, auth, echo.NewHTTPError(http.StatusForbidden, "Forbidden")
+	}
+
+	return
+}
+
+func checkProjectBackgroundWritePermissions(s *xorm.Session, c *echo.Context) (project *models.Project, auth web.Auth, err error) {
+	auth, err = auth2.GetAuthFromClaims(c)
+	if err != nil {
+		return nil, auth, echo.NewHTTPError(http.StatusBadRequest, "Invalid auth token: "+err.Error()).Wrap(err)
+	}
+
+	projectID, err := strconv.ParseInt(c.Param("project"), 10, 64)
+	if err != nil {
+		return nil, auth, echo.NewHTTPError(http.StatusBadRequest, "Invalid project ID: "+err.Error()).Wrap(err)
+	}
+
+	project = &models.Project{ID: projectID}
+	can, err := project.CanWrite(s, auth)
+	if err != nil {
+		_ = s.Rollback()
+		return nil, auth, err
+	}
+	if !can {
+		_ = s.Rollback()
+		log.Infof("Tried to modify project background of project %d while not having the permissions for it (User: %v)", projectID, auth)
+		return nil, auth, echo.NewHTTPError(http.StatusForbidden, "Forbidden")
+	}
+
+	return
+}
+
+// GetProjectBackground serves a previously set background from a project
+// It has no knowledge of the provider that was responsible for setting the background.
+// @Summary Get the project background
+// @Description Get the project background of a specific project. **Returns json on error.**
+// @tags project
+// @Produce octet-stream
+// @Param id path int true "Project ID"
+// @Security JWTKeyAuth
+// @Success 200 {file} blob "The project background file."
+// @Failure 403 {object} models.Message "No access to this project."
+// @Failure 404 {object} models.Message "The project does not exist."
+// @Failure 500 {object} models.Message "Internal error"
+// @Router /projects/{id}/background [get]
+func GetProjectBackground(c *echo.Context) error {
+
+	s := db.NewSession()
+	defer s.Close()
+
+	project, _, err := checkProjectBackgroundRights(s, c)
+	if err != nil {
+		return err
+	}
+
+	bgFile, stat, err := LoadProjectBackgroundForDownload(s, project)
+	if err != nil {
+		_ = s.Rollback()
+		if models.IsErrProjectHasNoBackground(err) {
+			return echo.NewHTTPError(http.StatusNotFound, "Project background not found")
+		}
+		return err
+	}
+
+	if err := s.Commit(); err != nil {
+		_ = s.Rollback()
+		return err
+	}
+
+	webfiles.WriteProjectBackground(c.Response(), c.Request(), bgFile, stat)
+	return nil
+}
+
+// LoadProjectBackgroundForDownload opens the project's background file (bytes ready to
+// read) and stats it for the modtime the download uses for caching. It also fires the
+// Unsplash pingback side effect, required by Unsplash's API guidelines and done
+// server-side so no user details are exposed. Returns ErrProjectHasNoBackground when the
+// project has none; the caller owns committing the session and closing bgFile.File.
+func LoadProjectBackgroundForDownload(s *xorm.Session, project *models.Project) (bgFile *files.File, stat os.FileInfo, err error) {
+	if project.BackgroundFileID == 0 {
+		return nil, nil, &models.ErrProjectHasNoBackground{ProjectID: project.ID}
+	}
+
+	bgFile = &files.File{ID: project.BackgroundFileID}
+	if err := bgFile.LoadFileByID(); err != nil {
+		return nil, nil, err
+	}
+	stat, err = files.FileStat(bgFile)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	// FIXME: This should use an event once we have events
+	unsplash.Pingback(s, bgFile)
+
+	return bgFile, stat, nil
+}
+
+// RemoveProjectBackground removes a project background, no matter the background provider
+// @Summary Remove a project background
+// @Description Removes a previously set project background, regardless of the project provider used to set the background. It does not throw an error if the project does not have a background.
+// @tags project
+// @Produce json
+// @Param id path int true "Project ID"
+// @Security JWTKeyAuth
+// @Success 200 {object} models.Project "The project"
+// @Failure 403 {object} models.Message "No access to this project."
+// @Failure 404 {object} models.Message "The project does not exist."
+// @Failure 500 {object} models.Message "Internal error"
+// @Router /projects/{id}/background [delete]
+func RemoveProjectBackground(c *echo.Context) error {
+	s := db.NewSession()
+	defer s.Close()
+
+	project, _, err := checkProjectBackgroundWritePermissions(s, c)
+	if err != nil {
+		_ = s.Rollback()
+		return err
+	}
+
+	err = project.DeleteBackgroundFileIfExists(s)
+	if err != nil {
+		_ = s.Rollback()
+		return err
+	}
+
+	err = models.ClearProjectBackground(s, project.ID)
+	if err != nil {
+		_ = s.Rollback()
+		return err
+	}
+
+	if err := s.Commit(); err != nil {
+		return err
+	}
+
+	return c.JSON(http.StatusOK, project)
+}

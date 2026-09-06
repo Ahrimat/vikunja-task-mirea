@@ -1,0 +1,126 @@
+// Global base theme rules: resets focus outlines, wires up focus-visible styling
+// using the --primary token, sets body background, and defines a handful of
+// generic utility classes (.box, .is-fullwidth, .color-bubble, etc.).
+
+*,
+*:hover,
+*:active,
+*:focus {
+  outline: none;
+}
+
+a, button, input[type='checkbox'], input[type='radio'], select, [tabindex], [contenteditable='true'] {
+  &:focus-visible {
+    @include focus-ring;
+  }
+
+  @supports not selector(:focus-visible) {
+    &:focus {
+      @include focus-ring;
+    }
+  }
+}
+
+:root {
+  // Bulma sets this to "scroll" which gives us a scrollbar even if there's no content to scroll
+  --body-overflow-y: auto;
+}
+
+// The LanguageTool browser plugin creates a custom element with shadow root for textareas.
+// Since shadow root doesn't inherit styles, we have to set `box-sizing` to `border-box` instead of `inherit`.
+// https://dev.to/konnorrogers/revisiting-box-sizing-best-practices-3del
+*,
+*::after,
+*::before {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--site-background);
+  min-height: 100vh;
+ 
+  @media print {
+    background: #fff;
+  }
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: $vikunja-font;
+  font-weight: 400 !important;
+}
+
+// FIXME: these helpers should be mixins
+.has-no-border {
+  border: none !important;
+}
+
+.has-rounded-corners {
+  border-radius: $radius;
+}
+
+.has-overflow {
+  overflow: visible !important;
+}
+
+.has-horizontal-overflow {
+	overflow-y: hidden;
+	overflow-x: auto;
+}
+
+button.table {
+  margin-block-end: 0 !important;
+}
+
+.is-max-width-desktop {
+  width: 100%;
+  max-width: $desktop;
+  margin: 0 auto;
+}
+
+.has-no-shadow {
+  &,
+  &.is-hovered,
+  &:hover,
+  &.is-active,
+  &.is-focused,
+  &:active,
+  &:focus,
+  &:focus:not(:active) {
+    box-shadow: none !important;
+  }
+}
+
+.is-fullwidth {
+  width: 100%;
+}
+
+.color-bubble {
+  display: inline-block;
+  border-radius: 100%;
+}
+
+.is-strikethrough {
+  text-decoration: line-through;
+}
+
+// Pointer type, not touch-event support: a touchscreen desktop has both touch events
+// and hover, and there this would pin the handle over what it replaces on hover.
+@media (pointer: coarse) {
+  .handle {
+    opacity: 1 !important;
+  }
+}
+
+.dragging-disabled .handle {
+	opacity: 0 !important;
+}
+
+.box {
+  border: 1px solid var(--grey-200);
+  box-shadow: var(--shadow-sm);
+}

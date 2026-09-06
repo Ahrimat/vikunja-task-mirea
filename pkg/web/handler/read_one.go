@@ -1,0 +1,63 @@
+// Vikunja is a to-do list application to facilitate your life.
+// Copyright 2018-present Vikunja and contributors. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+package handler
+
+import (
+	"errors"
+	"fmt"
+	"net/http"
+	"strconv"
+
+	"code.vikunja.io/api/pkg/log"
+	"code.vikunja.io/api/pkg/models"
+	"code.vikunja.io/api/pkg/modules/auth"
+
+	"github.com/labstack/echo/v5"
+)
+
+// ReadOneWeb is the webhandler to get one object
+func (c *WebHandler) ReadOneWeb(ctx *echo.Context) error {
+	// Get our model
+	currentStruct := c.EmptyStruct()
+
+	// Get the object & bind params to struct
+	if err := ctx.Bind(currentStruct); err != nil {
+		log.Debugf("Invalid model error. Internal error was: %s", err.Error())
+		var he *echo.HTTPError
+		if errors.As(err, &he) {
+			return models.ErrInvalidModel{Message: fmt.Sprintf("%v", he.Message), Err: err}
+		}
+		return models.ErrInvalidModel{Err: err}
+	}
+
+	// Check permissions
+	currentAuth, err := auth.GetAuthFromClaims(ctx)
+	if err != nil {
+		return echo.NewHTTPError(http.StatusInternalServerError, "Could not determine the current user.").Wrap(err)
+	}
+
+	maxPermission, err := DoReadOne(ctx.Request().Context(), currentStruct, currentAuth)
+	if err != nil {
+		return err
+	}
+
+	// Set the headers
+	ctx.Response().Header().Set("x-max-permission", strconv.FormatInt(int64(maxPermission), 10))
+	ctx.Response().Header().Set("Access-Control-Expose-Headers", "x-max-permission")
+
+	return ctx.JSON(http.StatusOK, currentStruct)
+}

@@ -1,0 +1,186 @@
+// Vikunja is a to-do list application to facilitate your life.
+// Copyright 2018-present Vikunja and contributors. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+package v1
+
+import (
+	"io"
+	"net/http"
+	"strconv"
+
+	"code.vikunja.io/api/pkg/config"
+	"code.vikunja.io/api/pkg/db"
+	"code.vikunja.io/api/pkg/events"
+	"code.vikunja.io/api/pkg/files"
+	"code.vikunja.io/api/pkg/models"
+	"code.vikunja.io/api/pkg/user"
+	"github.com/labstack/echo/v5"
+	"xorm.io/xorm"
+)
+
+func checkExportRequest(c *echo.Context) (s *xorm.Session, u *user.User, err error) {
+	s = db.NewSession()
+
+	u, err = user.GetCurrentUserFromDB(s, c)
+	if err != nil {
+		s.Close()
+		return nil, nil, err
+	}
+
+	// Users authenticated with a third-party are unable to provide their password.
+	if u.Issuer != user.IssuerLocal {
+		return
+	}
+
+	var pass UserPasswordConfirmation
+	if err := c.Bind(&pass); err != nil {
+		s.Close()
+		return nil, nil, echo.NewHTTPError(http.StatusBadRequest, "No password provided.").Wrap(err)
+	}
+
+	err = c.Validate(pass)
+	if err != nil {
+		s.Close()
+		return nil, nil, echo.NewHTTPError(http.StatusBadRequest, err.Error()).Wrap(err)
+	}
+
+	err = user.CheckUserPassword(u, pass.Password)
+	if err != nil {
+		s.Close()
+		return nil, nil, err
+	}
+
+	return
+}
+
+// RequestUserDataExport is the handler to request a user data export
+// @Summary Request a user data export.
+// @tags user
+// @Accept json
+// @Produce json
+// @Security JWTKeyAuth
+// @Param password body v1.UserPasswordConfirmation true "User password to confirm the data export request."
+// @Success 200 {object} models.Message
+// @Failure 400 {object} web.HTTPError "Something's invalid."
+// @Failure 500 {object} models.Message "Internal server error."
+// @Router /user/export/request [post]
+func RequestUserDataExport(c *echo.Context) error {
+	s, u, err := checkExportRequest(c)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	events.DispatchOnCommit(s, &models.UserDataExportRequestedEvent{
+		User: u,
+	})
+
+	err = s.Commit()
+	if err != nil {
+		_ = s.Rollback()
+		events.CleanupPending(s)
+		return err
+	}
+
+	events.DispatchPending(c.Request().Context(), s)
+
+	return c.JSON(http.StatusOK, models.Message{Message: "Successfully requested data export. We will send you an email when it's ready."})
+}
+
+// DownloadUserDataExport is the handler to download a created user data export
+// @Summary Download a user data export.
+// @tags user
+// @Accept json
+// @Produce json
+// @Security JWTKeyAuth
+// @Param password body v1.UserPasswordConfirmation true "User password to confirm the download."
+// @Success 200 {object} models.Message
+// @Failure 400 {object} web.HTTPError "Something's invalid."
+// @Failure 404 {object} web.HTTPError "No user data export found."
+// @Failure 500 {object} models.Message "Internal server error."
+// @Router /user/export/download [post]
+func DownloadUserDataExport(c *echo.Context) error {
+	s, u, err := checkExportRequest(c)
+	if err != nil {
+		return err
+	}
+	defer s.Close()
+
+	var exportFile *files.File
+	if err := func() error {
+		exportFile, err = models.GetUserDataExportFile(s, u)
+		if err != nil {
+			_ = s.Rollback()
+			return err
+		}
+
+		if err := s.Commit(); err != nil {
+			_ = s.Rollback()
+			return err
+		}
+
+		return models.OpenUserDataExportFile(exportFile)
+	}(); err != nil {
+		if models.IsErrUserDataExportDoesNotExist(err) {
+			return echo.NewHTTPError(http.StatusNotFound, "No user data export found.")
+		}
+		return err
+	}
+	defer func() { _ = exportFile.File.Close() }()
+
+	// Downloads must never be cached; no-cache overrides the global no-store
+	// directive while still allowing revalidation.
+	c.Response().Header().Set("Cache-Control", "no-cache")
+
+	if config.FilesType.GetString() == "s3" {
+		c.Response().Header().Set("Content-Disposition", "attachment; filename=\""+exportFile.Name+"\"")
+		c.Response().Header().Set("Content-Type", exportFile.Mime)
+		c.Response().Header().Set("Content-Length", strconv.FormatUint(exportFile.Size, 10))
+		c.Response().Header().Set("Last-Modified", exportFile.Created.UTC().Format(http.TimeFormat))
+		_, err = io.Copy(c.Response(), exportFile.File)
+		return err
+	}
+
+	http.ServeContent(c.Response(), c.Request(), exportFile.Name, exportFile.Created, exportFile.File.(io.ReadSeeker))
+	return nil
+}
+
+// GetUserExportStatus returns metadata about the current user export if it exists
+// @Summary Get current user data export
+// @tags user
+// @Produce json
+// @Security JWTKeyAuth
+// @Success 200 {object} models.UserExportStatus
+// @Router /user/export [get]
+func GetUserExportStatus(c *echo.Context) error {
+	s := db.NewSession()
+	defer s.Close()
+
+	u, err := user.GetCurrentUserFromDB(s, c)
+	if err != nil {
+		return err
+	}
+
+	status, err := models.GetUserDataExportStatus(s, u)
+	if err != nil {
+		return err
+	}
+	if status == nil {
+		return c.JSON(http.StatusOK, struct{}{})
+	}
+
+	return c.JSON(http.StatusOK, status)
+}

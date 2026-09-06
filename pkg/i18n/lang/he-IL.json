@@ -1,0 +1,45 @@
+{
+	"notifications": {
+		"greeting": "שלום %[1],",
+		"email_confirm": {
+			"subject": "%[1]sֿ, נא לאמת כתובת אימייל שלך ב-Vikunja",
+			"welcome": "ברוכ/ה הבא/ה לוויקוניה!",
+			"confirm": "ללחוץ על הלינק מתחת כדי לאשרר כתובת אימייל שלך"
+		},
+		"password": {
+			"changed": {
+				"subject": "סיסמתך ב-Vikunja שונתה",
+				"success": "סיסמת חשבונך ב-Vikunja שונתה בהצלחה",
+				"warning": "אם זה לא ממך, ייתכן שמישהו סיכן את חשבונך. במקרה זה, יש ליצור קשר עם מנהל השרת"
+			},
+			"reset": {
+				"subject": "לאפס סיסמתך ב-Vikunja",
+				"instructions": "יש ללחוץ על הלינק מתחת לאפס סיסמתך",
+				"valid_duration": "הלינק יישאר למשך 24 שעות"
+			}
+		},
+		"totp": {
+			"invalid": {
+				"subject": "היה לפני רגע ניסיון כושל להיכנס לחשבוןך ב-Vikunja",
+				"message": "מישהו ניסה להיכנס לחשבונך עם שם משתמש וסיסמה תקינים אבל TOTP passcode לא תקין",
+				"warning": "** אם זה לא היה את/ה, אז סיסמתך נודעה. חשוב ליצור סיסמה חדשה מיידית**"
+			},
+			"account_locked": {
+				"subject": "חסמנו חשבונך ב-Vikunja",
+				"message": "מישהו ניסה להיכנס עם הזיהוי שלך אבל לא סיפק TOTP passcode תקין."
+			}
+		},
+		"common": {
+			"actions": {
+				"open_project": "פתיחת פרויקט",
+				"open_team": "פתיחת צוות",
+				"download": "הורדה",
+				"reset_password": "איפוס סיסמה",
+				"go_to_settings": "להגדרות",
+				"confirm_email": "אישור כתובת אימייל",
+				"abort_deletion": "ביטול במחיקה",
+				"confirm_account_deletion": "אישור ביטול החשבון שלי"
+			}
+		}
+	}
+}

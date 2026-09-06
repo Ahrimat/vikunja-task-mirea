@@ -1,0 +1,274 @@
+<template>
+	<div>
+		<Message
+			v-if="confirmedEmailSuccess"
+			variant="success"
+			text-align="center"
+			class="mbe-4"
+		>
+			{{ $t('user.auth.confirmEmailSuccess') }}
+		</Message>
+		<Message
+			v-if="errorMessage"
+			variant="danger"
+			class="mbe-4"
+		>
+			{{ errorMessage }}
+		</Message>
+
+		<DesktopLogin v-if="isDesktop" />
+
+		<form
+			v-if="!isDesktop && (localAuthEnabled || ldapAuthEnabled)"
+			id="loginform"
+			@submit.prevent="submit"
+		>
+			<FormField
+				id="username"
+				ref="usernameRef"
+				v-focus
+				:label="$t('user.auth.usernameEmail')"
+				name="username"
+				:placeholder="$t('user.auth.usernamePlaceholder')"
+				required
+				type="text"
+				autocomplete="username"
+				:error="usernameValid ? null : $t('user.auth.usernameRequired')"
+				@keyup.enter="submit"
+				@focusout="validateUsernameField()"
+			/>
+			<div class="field">
+				<div class="label-with-link">
+					<label
+						class="label"
+						for="password"
+					>{{ $t('user.auth.password') }}</label>
+					<RouterLink
+						v-if="localAuthEnabled"
+						:to="{ name: 'user.password-reset.request' }"
+						class="reset-password-link"
+					>
+						{{ $t('user.auth.forgotPassword') }}
+					</RouterLink>
+				</div>
+				<Password
+					v-model="password"
+					:validate-initially="validatePasswordInitially"
+					:validate-min-length="false"
+					@submit="submit"
+				/>
+			</div>
+			<FormField
+				v-if="needsTotpPasscode"
+				id="totpPasscode"
+				ref="totpPasscode"
+				v-focus
+				:label="$t('user.auth.totpTitle')"
+				autocomplete="one-time-code"
+				:placeholder="$t('user.auth.totpPlaceholder')"
+				required
+				type="text"
+				inputmode="numeric"
+				@keyup.enter="submit"
+			/>
+			<FormCheckbox
+				v-model="rememberMe"
+				:label="$t('user.auth.remember')"
+			/>
+
+			<XButton
+				:loading="isLoading"
+				@click="submit"
+			>
+				{{ $t('user.auth.login') }}
+			</XButton>
+			<p
+				v-if="registrationEnabled"
+				class="mbs-2"
+			>
+				{{ $t('user.auth.noAccountYet') }}
+				<RouterLink
+					:to="{ name: 'user.register' }"
+					type="secondary"
+					class="inline-link"
+				>
+					{{ $t('user.auth.createAccount') }}
+				</RouterLink>
+			</p>
+		</form>
+
+		<div
+			v-if="!isDesktop && hasOpenIdProviders"
+			class="mbs-4"
+		>
+			<XButton
+				v-for="(p, k) in openidConnect.providers"
+				:key="k"
+				variant="secondary"
+				class="is-fullwidth mbs-2"
+				@click="redirectToProvider(p)"
+			>
+				{{ $t('user.auth.loginWith', {provider: p.name}) }}
+			</XButton>
+		</div>
+	</div>
+</template>
+
+<script setup lang="ts">
+import {computed, onBeforeMount, ref} from 'vue'
+import {useI18n} from 'vue-i18n'
+import {useRoute, useRouter} from 'vue-router'
+import {useDebounceFn} from '@vueuse/core'
+
+import Message from '@/components/misc/Message.vue'
+import Password from '@/components/input/Password.vue'
+import FormField from '@/components/input/FormField.vue'
+import FormCheckbox from '@/components/input/FormCheckbox.vue'
+import DesktopLogin from '@/views/user/DesktopLogin.vue'
+
+import {getErrorText} from '@/message'
+import {getAutoRedirectProvider, redirectToProvider} from '@/helpers/redirectToProvider'
+import {useRedirectToLastVisited} from '@/composables/useRedirectToLastVisited'
+import {isDesktopApp} from '@/helpers/desktopAuth'
+import {REDIRECT_HASH_PREFIX} from '@/constants/redirectHash'
+
+import {useAuthStore, JUST_LOGGED_OUT_KEY} from '@/stores/auth'
+import {useConfigStore} from '@/stores/config'
+
+import {useTitle} from '@/composables/useTitle'
+
+const {t} = useI18n({useScope: 'global'})
+useTitle(() => t('user.auth.login'))
+
+const route = useRoute()
+const router = useRouter()
+const authStore = useAuthStore()
+const configStore = useConfigStore()
+const {redirectIfSaved} = useRedirectToLastVisited()
+
+const registrationEnabled = computed(() => configStore.auth.local.registrationEnabled)
+const localAuthEnabled = computed(() => configStore.auth.local.enabled)
+const ldapAuthEnabled = computed(() => configStore.auth.ldap.enabled)
+
+const openidConnect = computed(() => configStore.auth.openidConnect)
+const hasOpenIdProviders = computed(() => openidConnect.value.enabled && openidConnect.value.providers?.length > 0)
+
+const isLoading = computed(() => authStore.isLoading)
+const isDesktop = isDesktopApp()
+
+const confirmedEmailSuccess = ref(false)
+const errorMessage = ref('')
+const password = ref('')
+const validatePasswordInitially = ref(false)
+const rememberMe = ref(false)
+
+const authenticated = computed(() => authStore.authenticated)
+
+onBeforeMount(() => {
+	authStore.verifyEmail().then((confirmed) => {
+		confirmedEmailSuccess.value = confirmed
+	}).catch((e: Error) => {
+		errorMessage.value = e.message
+	})
+
+	// Check if the user is already logged in, if so, redirect them to the homepage.
+	// We intentionally use router.push here instead of redirectIfSaved() because
+	// this hook also fires when Login.vue re-mounts inside the authenticated layout
+	// after a successful login. Using redirectIfSaved() here would clear the saved
+	// route before the submit() handler gets a chance to use it.
+	if (authenticated.value) {
+		router.push({name: 'home'})
+		return
+	}
+
+	// Consumed on read so the next visit to the login page can auto-redirect again.
+	const justLoggedOut = sessionStorage.getItem(JUST_LOGGED_OUT_KEY) !== null
+	if (justLoggedOut) {
+		sessionStorage.removeItem(JUST_LOGGED_OUT_KEY)
+	}
+
+	const autoRedirectProvider = getAutoRedirectProvider({
+		localAuthEnabled: localAuthEnabled.value,
+		ldapAuthEnabled: ldapAuthEnabled.value,
+		openIdEnabled: openidConnect.value.enabled,
+		providers: openidConnect.value.providers ?? [],
+		isDesktopApp: isDesktop,
+		justLoggedOut,
+		hasCopyableRedirect: route.hash.startsWith(REDIRECT_HASH_PREFIX),
+	})
+	if (autoRedirectProvider) {
+		redirectToProvider(autoRedirectProvider)
+	}
+})
+
+const usernameValid = ref(true)
+const usernameRef = ref<HTMLInputElement | null>(null)
+const validateUsernameField = useDebounceFn(() => {
+	usernameValid.value = usernameRef.value?.value !== ''
+}, 100)
+
+
+const needsTotpPasscode = computed(() => authStore.needsTotpPasscode)
+const totpPasscode = ref<HTMLInputElement | null>(null)
+
+async function submit() {
+	errorMessage.value = ''
+	// Some browsers prevent Vue bindings from working with autofilled values.
+	// To work around this, we're manually getting the values here instead of relying on vue bindings.
+	// For more info, see https://kolaente.dev/vikunja/frontend/issues/78
+	const credentials = {
+		username: usernameRef.value?.value,
+		password: password.value,
+		longToken: rememberMe.value,
+	}
+
+	if (credentials.username === '' || credentials.password === '') {
+		// Trigger the validation error messages
+		validateUsernameField()
+		validatePasswordInitially.value = true
+		return
+	}
+
+	if (needsTotpPasscode.value) {
+		credentials.totpPasscode = totpPasscode.value?.value
+	}
+
+	try {
+		await authStore.login(credentials)
+		authStore.setNeedsTotpPasscode(false)
+
+		redirectIfSaved()
+	} catch (e) {
+		if (e.response?.data.code === 1017 && !credentials.totpPasscode) {
+			return
+		}
+
+		errorMessage.value = getErrorText(e)
+	}
+}
+</script>
+
+<style lang="scss" scoped>
+.button {
+	margin: 0 0.4rem 0 0;
+}
+
+.reset-password-link {
+	display: inline-block;
+}
+
+// Underline links sitting inside body text so they're not distinguished by color alone
+.inline-link {
+	text-decoration: underline;
+}
+
+.label-with-link {
+	display: flex;
+	justify-content: space-between;
+	margin-block-end: .5rem;
+
+	.label {
+		margin-block-end: 0;
+	}
+}
+</style>

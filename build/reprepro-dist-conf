@@ -1,0 +1,13 @@
+Origin: dl.vikunja.io
+Label: Vikunja
+Codename: stable
+Architectures: amd64 arm64 armhf
+Components: main
+Description: The Vikunja package repository.
+
+Origin: dl.vikunja.io
+Label: Vikunja
+Codename: unstable
+Architectures: amd64 arm64 armhf
+Components: main
+Description: The Vikunja unstable package repository.

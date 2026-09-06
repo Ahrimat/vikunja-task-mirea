@@ -1,0 +1,41 @@
+<template>
+	<div
+		v-if="labels?.length > 0"
+		class="label-wrapper"
+	>
+		<XLabel
+			v-for="label in displayLabels"
+			:key="label.id"
+			:label="label"
+		/>
+	</div>
+</template>
+
+<script setup lang="ts">
+import {computed} from 'vue'
+
+import type {Label} from '@/client/generated'
+import XLabel from '@/components/tasks/partials/Label.vue'
+
+const props = defineProps<{
+	labels: Label[],
+}>()
+
+const displayLabels = computed(() =>
+	Array.from(new Map(props.labels.map(label => [label.id, label])).values())
+		.sort((a, b) => (a.title ?? '').localeCompare(b.title ?? '')),
+)
+</script>
+
+<style lang="scss" scoped>
+.label-wrapper {
+	display: inline-flex;
+	flex-wrap: wrap;
+	gap: 0.25rem;
+	align-items: flex-start;
+
+	:deep(.tag) {
+		margin: 0;
+	}
+}
+</style>

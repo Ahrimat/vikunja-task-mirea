@@ -1,0 +1,693 @@
+// Vikunja is a to-do list application to facilitate your life.
+// Copyright 2018-present Vikunja and contributors. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+package openid
+
+import (
+	"encoding/json"
+	"testing"
+	"time"
+
+	"code.vikunja.io/api/pkg/models"
+
+	"code.vikunja.io/api/pkg/db"
+	"code.vikunja.io/api/pkg/user"
+	"github.com/coreos/go-oidc/v3/oidc"
+	"github.com/pquerna/otp/totp"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestGetOrCreateUser(t *testing.T) {
+	t.Run("new user", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		cl := &claims{
+			Email:             "test@example.com",
+			PreferredUsername: "someUserWhoDoesNotExistYet",
+		}
+		provider := &Provider{}
+		idToken := &oidc.IDToken{Issuer: "https://some.issuer", Subject: "12345"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		require.NoError(t, err)
+		err = s.Commit()
+		require.NoError(t, err)
+
+		db.AssertExists(t, "users", map[string]interface{}{
+			"id":       u.ID,
+			"email":    cl.Email,
+			"username": "someUserWhoDoesNotExistYet",
+		}, false)
+	})
+	t.Run("new user, no username provided", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		cl := &claims{
+			Email:             "test@example.com",
+			PreferredUsername: "",
+		}
+		provider := &Provider{}
+		idToken := &oidc.IDToken{Issuer: "https://some.issuer", Subject: "12345"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		require.NoError(t, err)
+		assert.NotEmpty(t, u.Username)
+		err = s.Commit()
+		require.NoError(t, err)
+
+		db.AssertExists(t, "users", map[string]interface{}{
+			"id":    u.ID,
+			"email": cl.Email,
+		}, false)
+	})
+	t.Run("new user, no email address", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		cl := &claims{
+			Email: "",
+		}
+		provider := &Provider{}
+		idToken := &oidc.IDToken{Issuer: "https://some.issuer", Subject: "12345"}
+
+		_, err := getOrCreateUser(s, cl, provider, idToken)
+		require.Error(t, err)
+	})
+	t.Run("existing user, different email address", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		cl := &claims{
+			Email: "other-email-address@some.service.com",
+		}
+		provider := &Provider{}
+		idToken := &oidc.IDToken{Issuer: "https://some.service.com", Subject: "12345"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		require.NoError(t, err)
+		err = s.Commit()
+		require.NoError(t, err)
+
+		db.AssertExists(t, "users", map[string]interface{}{
+			"id":    u.ID,
+			"email": cl.Email,
+		}, false)
+	})
+	t.Run("existing user, non existing team", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		team := "new sso team"
+		oidcID := "47404"
+		cl := &claims{
+			Email: "other-email-address@some.service.com",
+			VikunjaGroups: []map[string]interface{}{
+				{"name": team, "oidcID": oidcID},
+			},
+		}
+
+		provider := &Provider{Name: "Vikunja Login"}
+		idToken := &oidc.IDToken{Issuer: "https://some.service.com", Subject: "12345"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		require.NoError(t, err)
+		teamData := getTeamDataFromToken(cl.VikunjaGroups, nil)
+		require.NoError(t, err)
+		err = models.SyncExternalTeamsForUser(s, u, teamData, "https://some.issuer", provider.Name)
+		require.NoError(t, err)
+		err = s.Commit()
+		require.NoError(t, err)
+
+		db.AssertExists(t, "users", map[string]interface{}{
+			"id":    u.ID,
+			"email": cl.Email,
+		}, false)
+		db.AssertExists(t, "teams", map[string]interface{}{
+			"name":        team + " (" + provider.Name + ")",
+			"external_id": oidcID,
+			"is_public":   false,
+		}, false)
+	})
+
+	t.Run("Update IsPublic flag for existing team", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		team := "testteam15"
+		oidcID := "15"
+		cl := &claims{
+			Email: "other-email-address@some.service.com",
+			VikunjaGroups: []map[string]interface{}{
+				{"name": team, "oidcID": oidcID, "isPublic": true},
+			},
+		}
+
+		provider := &Provider{Name: "Vikunja Login"}
+		idToken := &oidc.IDToken{Issuer: "https://some.service.com", Subject: "12345"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		require.NoError(t, err)
+		teamData := getTeamDataFromToken(cl.VikunjaGroups, nil)
+		err = models.SyncExternalTeamsForUser(s, u, teamData, "https://some.issuer", provider.Name)
+		require.NoError(t, err)
+		err = s.Commit()
+		require.NoError(t, err)
+
+		db.AssertExists(t, "teams", map[string]interface{}{
+			"name":        team + " (" + provider.Name + ")",
+			"external_id": oidcID,
+			"is_public":   true,
+		}, false)
+	})
+
+	t.Run("existing user, assign to existing team", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		team := "testteam14"
+		oidcID := "14"
+		cl := &claims{
+			Email: "other-email-address@some.service.com",
+			VikunjaGroups: []map[string]interface{}{
+				{"name": team, "oidcID": oidcID},
+			},
+		}
+
+		u := &user.User{ID: 10}
+		teamData := getTeamDataFromToken(cl.VikunjaGroups, nil)
+		err := models.SyncExternalTeamsForUser(s, u, teamData, "https://some.issuer", "Vikunja Login")
+		require.NoError(t, err)
+		err = s.Commit()
+		require.NoError(t, err)
+
+		db.AssertExists(t, "team_members", map[string]interface{}{
+			"user_id": u.ID,
+		}, false)
+	})
+	t.Run("existing user, remove from existing team", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		cl := &claims{
+			Email:         "other-email-address@some.service.com",
+			VikunjaGroups: []map[string]interface{}{},
+		}
+
+		u := &user.User{ID: 10}
+		teamData := getTeamDataFromToken(cl.VikunjaGroups, nil)
+		err := models.SyncExternalTeamsForUser(s, u, teamData, "https://some.issuer", "Vikunja Login")
+		require.NoError(t, err)
+		err = s.Commit()
+		require.NoError(t, err)
+
+		db.AssertMissing(t, "team_members", map[string]interface{}{
+			"team_id": 14,
+			"user_id": u.ID,
+		})
+		db.AssertMissing(t, "team_members", map[string]interface{}{
+			"team_id": 15,
+			"user_id": u.ID,
+		})
+		// This team is not external and should not be touched
+		db.AssertExists(t, "team_members", map[string]interface{}{
+			"team_id": 13,
+			"user_id": u.ID,
+		}, false)
+	})
+	t.Run("ProviderFallback: Match to existing local user on username", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		cl := &claims{}
+		provider := &Provider{
+			UsernameFallback: true,
+		}
+		idToken := &oidc.IDToken{Issuer: "https://some.issuer", Subject: "user11"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		require.NoError(t, err)
+		assert.Equal(t, idToken.Subject, u.Username, "subject match username")
+		assert.Equal(t, user.IssuerLocal, u.Issuer, "User should be a local one")
+		assert.Equal(t, 11, int(u.ID), "user id 11 expected")
+	})
+	t.Run("ProviderFallback: Match to existing local user on preferred_username when sub differs", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		cl := &claims{
+			PreferredUsername: "user11",
+		}
+		provider := &Provider{
+			UsernameFallback: true,
+		}
+		// PocketID-style: the subject is an opaque UUID that does not match any local username.
+		idToken := &oidc.IDToken{Issuer: "https://some.issuer", Subject: "c0ffee00-dead-beef-cafe-000000000011"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		require.NoError(t, err)
+		err = s.Commit()
+		require.NoError(t, err)
+
+		assert.Equal(t, "user11", u.Username, "should link to the local user matching preferred_username")
+		assert.Equal(t, user.IssuerLocal, u.Issuer, "User should be a local one")
+		assert.Equal(t, 11, int(u.ID), "user id 11 expected")
+
+		// No duplicate user must be created for the opaque subject.
+		db.AssertMissing(t, "users", map[string]interface{}{
+			"subject": idToken.Subject,
+		})
+	})
+	t.Run("ProviderFallback: reject bot matched by preferred_username", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		cl := &claims{
+			Email:             "bot@example.com",
+			PreferredUsername: "bot-owner-a-assistant",
+		}
+		provider := &Provider{
+			UsernameFallback: true,
+		}
+		idToken := &oidc.IDToken{Issuer: "https://some.issuer", Subject: "c0ffee00-dead-beef-cafe-000000000023"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		assert.True(t, user.IsErrAccountIsBot(err))
+		assert.Nil(t, u)
+	})
+	t.Run("ProviderFallback: Falls back to sub when preferred_username is empty", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		cl := &claims{
+			PreferredUsername: "",
+		}
+		provider := &Provider{
+			UsernameFallback: true,
+		}
+		idToken := &oidc.IDToken{Issuer: "https://some.issuer", Subject: "user11"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		require.NoError(t, err)
+		assert.Equal(t, idToken.Subject, u.Username, "subject should match username")
+		assert.Equal(t, user.IssuerLocal, u.Issuer, "User should be a local one")
+		assert.Equal(t, 11, int(u.ID), "user id 11 expected")
+	})
+	t.Run("ProviderFallback: Match to existing local user on email", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		usersBefore, err := s.Count(&user.User{})
+		require.NoError(t, err)
+
+		cl := &claims{
+			Email:         "user11@example.com",
+			EmailVerified: true,
+		}
+		provider := &Provider{
+			EmailFallback: true,
+		}
+		idToken := &oidc.IDToken{Issuer: "https://some.issuer", Subject: "user11"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		require.NoError(t, err)
+		assert.Equal(t, cl.Email, u.Email, "email should match")
+		assert.Equal(t, user.IssuerLocal, u.Issuer, "User should be a local one")
+		assert.Equal(t, 11, int(u.ID), "user id 11 expected")
+
+		// The email-only fallback must link the existing user, not create a duplicate.
+		usersAfter, err := s.Count(&user.User{})
+		require.NoError(t, err)
+		assert.Equal(t, usersBefore, usersAfter, "no new user should have been created")
+	})
+	t.Run("ProviderFallback: unverified email does not link to an existing local user", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		// GHSA-xv7q-fvmc-jx96: an attacker asserting a victim's email without
+		// email_verified must not be linked to the victim's local account.
+		cl := &claims{
+			Email:             "user11@example.com",
+			EmailVerified:     false,
+			PreferredUsername: "attackerUser",
+		}
+		provider := &Provider{
+			EmailFallback: true,
+		}
+		idToken := &oidc.IDToken{Issuer: "https://some.issuer", Subject: "attacker-subject"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		require.NoError(t, err)
+		err = s.Commit()
+		require.NoError(t, err)
+
+		assert.NotEqual(t, 11, int(u.ID), "must not link to user 11 via an unverified email")
+		assert.Equal(t, "https://some.issuer", u.Issuer, "a new separate account should have been created")
+		assert.Equal(t, "attacker-subject", u.Subject)
+	})
+	t.Run("ProviderFallback: verified email links to existing local user despite unknown subject", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		cl := &claims{
+			Email:         "user11@example.com",
+			EmailVerified: true,
+		}
+		provider := &Provider{
+			EmailFallback: true,
+		}
+		idToken := &oidc.IDToken{Issuer: "https://some.issuer", Subject: "attacker-subject"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		require.NoError(t, err)
+		assert.Equal(t, 11, int(u.ID), "user id 11 expected")
+		assert.Equal(t, user.IssuerLocal, u.Issuer, "User should be a local one")
+	})
+	t.Run("ProviderFallback: empty email claim does not link to an arbitrary local user", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		usersBefore, err := s.Count(&user.User{})
+		require.NoError(t, err)
+
+		// EmailFallback on, no username fallback, and the IdP sent no email claim. The
+		// email-only search must not degenerate to an issuer-only lookup matching an
+		// arbitrary local user. With no email there is nothing safe to match on, so the
+		// flow falls through to user creation (which then errors because an email is
+		// required) rather than silently linking an existing local account.
+		cl := &claims{
+			Email:             "",
+			PreferredUsername: "brandNewOidcUser",
+		}
+		provider := &Provider{
+			EmailFallback: true,
+		}
+		idToken := &oidc.IDToken{Issuer: "https://some.issuer", Subject: "opaque-subject-no-email"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		// Must not have linked an existing local user.
+		require.Error(t, err, "an empty email must not silently link an existing local user")
+		assert.Nil(t, u, "no existing local user should be returned for an empty email claim")
+
+		usersAfter, err := s.Count(&user.User{})
+		require.NoError(t, err)
+		assert.Equal(t, usersBefore, usersAfter, "no user should have been linked or created from an empty email claim")
+	})
+	t.Run("ProviderFallback: Match to existing local user  on username and email", func(t *testing.T) {
+
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		cl := &claims{
+			Email:         "user11@example.com",
+			EmailVerified: true,
+		}
+		provider := &Provider{
+			UsernameFallback: true,
+			EmailFallback:    true,
+		}
+		idToken := &oidc.IDToken{Issuer: "https://some.issuer", Subject: "user11"}
+
+		u, err := getOrCreateUser(s, cl, provider, idToken)
+		require.NoError(t, err)
+		assert.Equal(t, cl.Email, u.Email, "email should match")
+		assert.Equal(t, idToken.Subject, u.Username, "subject match username")
+		assert.Equal(t, user.IssuerLocal, u.Issuer, "User should be a local one")
+		assert.Equal(t, 11, int(u.ID), "user id 11 expected")
+	})
+}
+
+// TestMergeClaims tests the mergeClaims function with different configurations including forceUserInfo
+func TestMergeClaims(t *testing.T) {
+	t.Run("ForceUserInfo enabled - should use userinfo values", func(t *testing.T) {
+		// Setup token claims
+		tokenClaims := &claims{
+			Email:             "token-email@example.com",
+			Name:              "Token Name",
+			PreferredUsername: "token_username",
+		}
+
+		// Setup userinfo claims
+		userinfoClaims := &claims{
+			Email:             "userinfo-email@example.com",
+			Name:              "UserInfo Name",
+			PreferredUsername: "userinfo_username",
+		}
+
+		// Test with ForceUserInfo enabled
+		err := mergeClaims(tokenClaims, userinfoClaims, true)
+		require.NoError(t, err)
+
+		// Verify userinfo data was used
+		assert.Equal(t, "userinfo-email@example.com", tokenClaims.Email)
+		assert.Equal(t, "UserInfo Name", tokenClaims.Name)
+		assert.Equal(t, "userinfo_username", tokenClaims.PreferredUsername)
+	})
+
+	t.Run("ForceUserInfo disabled - should use token values if present", func(t *testing.T) {
+		// Setup token claims with all values
+		tokenClaims := &claims{
+			Email:             "token-email@example.com",
+			Name:              "Token Name",
+			PreferredUsername: "token_username",
+		}
+
+		// Setup userinfo claims
+		userinfoClaims := &claims{
+			Email:             "userinfo-email@example.com",
+			Name:              "UserInfo Name",
+			PreferredUsername: "userinfo_username",
+		}
+
+		// Test with ForceUserInfo disabled
+		err := mergeClaims(tokenClaims, userinfoClaims, false)
+		require.NoError(t, err)
+
+		// Verify token data was preserved
+		assert.Equal(t, "token-email@example.com", tokenClaims.Email)
+		assert.Equal(t, "Token Name", tokenClaims.Name)
+		assert.Equal(t, "token_username", tokenClaims.PreferredUsername)
+	})
+
+	t.Run("Missing values - should use userinfo when token is missing values", func(t *testing.T) {
+		// Setup token claims with missing values
+		tokenClaims := &claims{
+			Email: "token-email@example.com",
+			// Missing Name and PreferredUsername
+		}
+
+		// Setup userinfo claims
+		userinfoClaims := &claims{
+			Email:             "userinfo-email@example.com",
+			Name:              "UserInfo Name",
+			PreferredUsername: "userinfo_username",
+		}
+
+		// Test with ForceUserInfo disabled, but missing values in token
+		err := mergeClaims(tokenClaims, userinfoClaims, false)
+		require.NoError(t, err)
+
+		// Verify token email was kept, but missing fields were filled from userinfo
+		assert.Equal(t, "token-email@example.com", tokenClaims.Email)
+		assert.Equal(t, "UserInfo Name", tokenClaims.Name)
+		assert.Equal(t, "userinfo_username", tokenClaims.PreferredUsername)
+	})
+
+	t.Run("Use nickname when preferred_username is missing", func(t *testing.T) {
+		// Setup token claims with missing preferred_username
+		tokenClaims := &claims{
+			Email: "token-email@example.com",
+			Name:  "Token Name",
+			// Missing PreferredUsername
+		}
+
+		// Setup userinfo claims with nickname but no preferred_username
+		userinfoClaims := &claims{
+			Email:    "userinfo-email@example.com",
+			Name:     "UserInfo Name",
+			Nickname: "userinfo_nickname",
+			// Missing PreferredUsername to test fallback to nickname
+		}
+
+		// Test with ForceUserInfo disabled
+		err := mergeClaims(tokenClaims, userinfoClaims, false)
+		require.NoError(t, err)
+
+		// Verify nickname was used for preferred_username
+		assert.Equal(t, "userinfo_nickname", tokenClaims.PreferredUsername)
+	})
+
+	t.Run("Error when email is missing", func(t *testing.T) {
+		// Setup token claims with missing email
+		tokenClaims := &claims{
+			// Missing Email
+			Name:              "Token Name",
+			PreferredUsername: "token_username",
+		}
+
+		// Setup userinfo claims also with missing email
+		userinfoClaims := &claims{
+			// Missing Email
+			Name:              "UserInfo Name",
+			PreferredUsername: "userinfo_username",
+		}
+
+		// Test with ForceUserInfo disabled
+		err := mergeClaims(tokenClaims, userinfoClaims, false)
+
+		// Verify error is returned for missing email
+		require.Error(t, err)
+		var expectedErr *user.ErrNoOpenIDEmailProvided
+		assert.ErrorAs(t, err, &expectedErr)
+	})
+}
+
+func TestEnforceTOTPIfRequired(t *testing.T) {
+	// user 10 has TOTP enabled in pkg/db/fixtures/totp.yml with this secret.
+	const user10Secret = "JBSWY3DPEHPK3PXP"
+
+	t.Run("user without TOTP - no passcode required", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		// user 1 has a totp row but with enabled=false.
+		u := &user.User{ID: 1}
+		err := enforceTOTPIfRequired(s, u, "")
+		require.NoError(t, err)
+	})
+
+	t.Run("TOTP enabled - missing passcode returns ErrInvalidTOTPPasscode", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		u := &user.User{ID: 10}
+		err := enforceTOTPIfRequired(s, u, "")
+		require.Error(t, err)
+		assert.True(t, user.IsErrInvalidTOTPPasscode(err))
+	})
+
+	t.Run("TOTP enabled - invalid passcode returns ErrInvalidTOTPPasscode", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		u := &user.User{ID: 10}
+		err := enforceTOTPIfRequired(s, u, "000000")
+		require.Error(t, err)
+		assert.True(t, user.IsErrInvalidTOTPPasscode(err))
+	})
+
+	t.Run("TOTP enabled - valid passcode succeeds", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		passcode, err := totp.GenerateCode(user10Secret, time.Now())
+		require.NoError(t, err)
+
+		u := &user.User{ID: 10}
+		err = enforceTOTPIfRequired(s, u, passcode)
+		require.NoError(t, err)
+	})
+}
+
+func TestSyncUserAvatarFromOpenID(t *testing.T) {
+	t.Run("empty picture URL resets openid provider to default", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		// Use the fixture user that has avatar_provider = "openid"
+		u, err := user.GetUserByID(s, 19)
+		require.NoError(t, err)
+		assert.Equal(t, "openid", u.AvatarProvider, "precondition: user should have openid avatar provider")
+
+		err = syncUserAvatarFromOpenID(s, u, "")
+		require.NoError(t, err)
+		err = s.Commit()
+		require.NoError(t, err)
+
+		// Verify the avatar provider was reset to default in the database
+		db.AssertExists(t, "users", map[string]interface{}{
+			"id":              19,
+			"avatar_provider": "default",
+		}, false)
+	})
+
+	t.Run("empty picture URL does not reset non-openid provider", func(t *testing.T) {
+		db.LoadAndAssertFixtures(t)
+		s := db.NewSession()
+		defer s.Close()
+
+		// Use a regular user (avatar_provider is empty/"default")
+		u, err := user.GetUserByID(s, 1)
+		require.NoError(t, err)
+
+		err = syncUserAvatarFromOpenID(s, u, "")
+		require.NoError(t, err)
+		err = s.Commit()
+		require.NoError(t, err)
+
+		// Verify the avatar provider was NOT changed to "default" or anything else
+		s2 := db.NewSession()
+		defer s2.Close()
+		updatedUser, err := user.GetUserByID(s2, 1)
+		require.NoError(t, err)
+		assert.Empty(t, updatedUser.AvatarProvider, "avatar provider should remain empty for non-openid user")
+	})
+}
+
+func TestEmailVerifiedClaimDecoding(t *testing.T) {
+	// Some OIDC providers emit email_verified as a JSON string; both forms must
+	// decode without breaking the whole claims parse (GHSA-xv7q-fvmc-jx96).
+	cases := map[string]bool{
+		`{"email_verified": true}`:    true,
+		`{"email_verified": false}`:   false,
+		`{"email_verified": "true"}`:  true,
+		`{"email_verified": "false"}`: false,
+		`{"email_verified": "1"}`:     true,
+		`{"email_verified": "0"}`:     false,
+		`{}`:                          false,
+	}
+	for body, want := range cases {
+		t.Run(body, func(t *testing.T) {
+			var cl claims
+			require.NoError(t, json.Unmarshal([]byte(body), &cl))
+			assert.Equal(t, want, bool(cl.EmailVerified))
+		})
+	}
+}

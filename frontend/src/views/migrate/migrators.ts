@@ -1,0 +1,77 @@
+import wunderlistIcon from './icons/wunderlist.jpg'
+import todoistIcon from './icons/todoist.svg?url'
+import trelloIcon from './icons/trello.svg?url'
+import microsoftTodoIcon from './icons/microsoft-todo.svg?url'
+import vikunjaFileIcon from './icons/vikunja-file.png?url'
+import tickTickIcon from './icons/ticktick.svg?url'
+import wekanIcon from './icons/wekan.png?url'
+import csvIcon from './icons/csv.svg?url'
+import plankaIcon from './icons/planka.png?url'
+
+export interface Migrator {
+	id: string
+	name: string
+	isFileMigrator?: boolean
+	isCSVMigrator?: boolean
+	// Takes url + credentials in the migrate request instead of an OAuth code or a file
+	isCredentialsMigrator?: boolean
+	icon: string
+}
+
+interface IMigratorRecord {
+	[key: Migrator['id']]: Migrator
+ }
+
+export const MIGRATORS = {
+	wunderlist: {
+		id: 'wunderlist',
+		name: 'Wunderlist',
+		icon: wunderlistIcon,
+	},
+	todoist: {
+		id: 'todoist',
+		name: 'Todoist',
+		icon: todoistIcon as string,
+	},
+	trello: {
+		id: 'trello',
+		name: 'Trello',
+		icon: trelloIcon as string,
+	},
+	'microsoft-todo': {
+		id: 'microsoft-todo',
+		name: 'Microsoft Todo',
+		icon: microsoftTodoIcon as string,
+	},
+	'vikunja-file': {
+		id: 'vikunja-file',
+		name: 'Vikunja Export',
+		icon: vikunjaFileIcon,
+		isFileMigrator: true,
+	},
+	ticktick: {
+		id: 'ticktick',
+		name: 'TickTick',
+		icon: tickTickIcon as string,
+		isFileMigrator: true,
+	},
+	wekan: {
+		id: 'wekan',
+		name: 'WeKan ®',
+		icon: wekanIcon,
+		isFileMigrator: true,
+	},
+	csv: {
+		id: 'csv',
+		name: 'CSV',
+		icon: csvIcon as string,
+		isFileMigrator: true,
+		isCSVMigrator: true,
+	},
+	planka: {
+		id: 'planka',
+		name: 'Planka',
+		icon: plankaIcon,
+		isCredentialsMigrator: true,
+	},
+} as const satisfies IMigratorRecord

@@ -1,0 +1,838 @@
+{
+	"404": {
+		"title": "לא נמצא",
+		"text": "הדף שביקשת לא קיים."
+	},
+	"home": {
+		"welcomeNight": "לילה טוב {username}!",
+		"welcomeMorning": "בוקר טוב {username}!",
+		"welcomeDay": "שלום {username}!",
+		"welcomeEvening": "ערב טוב {username}!",
+		"lastViewed": "נצפה לאחרונה",
+		"addToHomeScreen": "הוסף אפליקציה זו למסך אם שלך לגישה מהירה וחוויה משופרה.",
+		"goToOverview": "לדף הסקירה הכללית",
+		"project": {
+			"importText": "ייבוא פרויקטים ומטלות משירותים אחרים ל-Vikunja:",
+			"import": "ייבוא נתונים שלך ל-Vikunja"
+		}
+	},
+	"demo": {
+		"title": "המופע כרגע במוד דמו. לא לשימוש עם נתוני אמת!",
+		"everythingWillBeDeleted": "הכל יימחק למרווחים רגילים!",
+		"accountWillBeDeleted": "חשבונך יימחק, כולל כל הפרויקטים, מטלות ומצורפים."
+	},
+	"ready": {
+		"loading": "ויקוניה בטעינה…",
+		"errorOccured": "אירעה שגיאה:",
+		"checkApiUrl": "נא לבדוק אם לינק ל-api הוא נכון.",
+		"noApiUrlConfigured": "חסר לינק ל-api. נא להכניס להלן:"
+	},
+	"offline": {
+		"title": "את/ה במצב לא מקוון.",
+		"text": "נא לבדוק חיבור לרשת ולנסות שוב."
+	},
+	"user": {
+		"auth": {
+			"username": "שם משתמש",
+			"usernameEmail": "שם משתמש או כתובת אימייל",
+			"usernamePlaceholder": "למשל david",
+			"email": "כתובת אימייל",
+			"emailPlaceholder": "למשל david{'@'}vikunja.io",
+			"password": "סיסמה",
+			"forgotPassword": "שכחת סיסמתך?",
+			"resetPassword": "לאפס סיסמתך",
+			"resetPasswordAction": "לשלוח לי לינק לאיפוס סיסמה",
+			"resetPasswordSuccess": "נא לבדוק בתיבת דואר נכנס! אמור להיות מייל עם הוראות לאיפוס סיסמתך.",
+			"confirmEmailSuccess": "אישרת את המייל בהצלחה! כעת אפשר להיכנס.",
+			"totpTitle": "קוד אימות דו שלבי",
+			"totpPlaceholder": "למשל 123456",
+			"login": "כניסה למערכת",
+			"createAccount": "ליצירת חשבון",
+			"loginWith": "להיכנס עם {provider}",
+			"authenticating": "מאמת…",
+			"openIdStateError": "מדינה לא תואמת, מסרב להמשיך!",
+			"openIdGeneralError": "אירעה שגיעת אימות מול הגורם השלישי.",
+			"logout": "יציאה",
+			"emailInvalid": "נא להכניס כתובת אימייל תָּקֵפה",
+			"usernameRequired": "נא לספק שם משתמש.",
+			"usernameMustNotContainSpace": "אסור רווחים בשם משתשמש.",
+			"usernameMustNotLookLikeUrl": "אסור ששם משתמש ייראה כמו URL.",
+			"passwordRequired": "נא לספק סיסמה.",
+			"passwordNotMin": "סיסמה חייבת להכיל לפחות 8 תווים.",
+			"passwordNotMax": "מקסימום 72 תווים בסיסמה.",
+			"showPassword": "להציג את הסיסמה",
+			"hidePassword": "הסתרת סיסמה",
+			"noAccountYet": "אין לך חשבון עדיין?",
+			"alreadyHaveAnAccount": "יש לך כבר חשבון?",
+			"remember": "להישאר מחובר",
+			"registrationDisabled": "לא ניתן להירשם"
+		},
+		"settings": {
+			"title": "הגדרות",
+			"newPasswordTitle": "עדכון סיסמה",
+			"newPassword": "סיסמה חדשה",
+			"currentPassword": "סיסמה נוכחית",
+			"currentPasswordPlaceholder": "סיסמתך הנוכחית",
+			"passwordUpdateSuccess": "סיסמה עודכנה בהצלחה.",
+			"updateEmailTitle": "עדכון כתובת אימייל",
+			"updateEmailNew": "כתובת אימייל חדשה",
+			"general": {
+				"title": "הגדרות כלליות",
+				"name": "השם שלי",
+				"newName": "השם החדש",
+				"savedSuccess": "הגדרות עודכנו בהצלחה.",
+				"emailReminders": "לשלוח לי במייל תזכורות למטלות",
+				"overdueReminders": "לשלוח לי סיכום יומי של מטלות באיחור",
+				"discoverableByName": "הרשה משתמשים אחרים להוסיף אותי לצוותים או פרויקטים כשהם מחפשים את שמי",
+				"discoverableByEmail": "הרשה משתמשים אחרים להוסיף אותי לצוותים או פרויקטים כשהם מחפשים את כתובת אימייל שלי",
+				"playSoundWhenDone": "לנגן צליל כאשר מסמנים מטלות כגמורים",
+				"weekStart": "השבוע מתחיל ב",
+				"weekStartSunday": "יום ראשון",
+				"weekStartMonday": "יום שני",
+				"language": "שפה",
+				"defaultProject": "פרויקט ברירת מחדל",
+				"defaultView": "תצוגת ברירת מחדל",
+				"timezone": "אזור זמן",
+				"overdueTasksRemindersTime": "השעה באימיילים על מטלות באיחור",
+				"filterUsedOnOverview": "נשמר מסנן בדף סקירה",
+				"minimumPriority": "עדיפות מטלה נראות מינימלית",
+				"externalUserNameChange": "שמך מנוהל על ידי ספק login provider ({provider}). לשנות, נא לעדכן אותו שם."
+			},
+			"totp": {
+				"title": "אימות דו שלבי",
+				"enroll": "להירשם",
+				"finishSetupPart1": "נא להשתמש בסוד הזה באפליקציה TOTP (Google Authenticator וכדומה) שלך:",
+				"finishSetupPart2": "לאחר מכן, הכנס קוד מהאפליקציה שלך להלן.",
+				"scanQR": "לחלופין, אפשר לסרוק קוד QR הזה:",
+				"passcode": "Passcode",
+				"passcodePlaceholder": "קוד הנוצר על ידי אפליקציה TOTP שלך",
+				"setupSuccess": "העמדת אימות דו שלבי בהצלחה!",
+				"enterPassword": "נא להכניס סיסמתך",
+				"disable": "לבטל אימות דו שלבי",
+				"disableSuccess": "אימות דו שלבי בוטלה בהצלחה."
+			},
+			"caldav": {
+				"title": "CalDAV",
+				"more": "עוד מידע על CalDAV ב-Vikunja",
+				"tokens": "אסימוני CalDAV"
+			},
+			"avatar": {
+				"title": "אווטאר",
+				"initials": "ראשי תיבות",
+				"gravatar": "גראווטאר",
+				"marble": "marble",
+				"upload": "העלאה",
+				"uploadAvatar": "העלאת אווטאר",
+				"statusUpdateSuccess": "סטטוס אווטאר עודכן בהצלחה!",
+				"setSuccess": "אווטאר נקבע בהצלחה!"
+			},
+			"quickAddMagic": {
+				"disabled": "מנוטרל",
+				"todoist": "רשימת todo"
+			},
+			"appearance": {
+				"title": "סכמה צבעים",
+				"colorScheme": {
+					"light": "בהיר",
+					"system": "מערכת",
+					"dark": "כהה"
+				}
+			},
+			"apiTokens": {
+				"title": "אסימוני API",
+				"general": "אסימוני API מאפשרים שימוש ב-Vikunja's API בלי credentials של המשתמש.",
+				"apiDocs": "לבדוק תעוד api",
+				"createAToken": "ליצור אסימון",
+				"createToken": "ליצור אסימון",
+				"30d": "30 ימים",
+				"60d": "60 ימים",
+				"90d": "90 ימים",
+				"titleRequired": "חובה להכניס כותרת",
+				"permissionRequired": "לבחור לפחות הרשאה אחת מתוך הרשימה.",
+				"expired": "תוקף האסימון פג לפני {ago}.",
+				"tokenCreatedSuccess": "הנה אסימון api החדש שלך: {token}",
+				"tokenCreatedNotSeeAgain": "לא תראה שוב אז לשמור במקום מבוטח!",
+				"delete": {
+					"header": "מחיקת אסימון זה",
+					"text1": "בטוח שברצונך למחוק את האסימון ״{token}״?",
+					"text2": "זה יבטל גישתך לכל האפליקציות שמשתמשים בו. לא ניתן לבטל פעולה זו."
+				},
+				"attributes": {
+					"title": "כותרת",
+					"titlePlaceholder": "הכנסת כותרת לזיהוי אחר כך",
+					"expiresAt": "תוקף פג ב...",
+					"permissions": "הרשאות"
+				}
+			}
+		},
+		"deletion": {
+			"title": "מחיקת חשבון Vikunja שלך",
+			"text1": "מחיקת חשבון לצמיתות ולא ניתן לבטל. נמחק כל הפרויקטים ומטלות שלך וכל הקשור להם.",
+			"text2": "הכנס סיסמה כדי להתקדם. יישלח אימייל עם הוראות.",
+			"text3": "ללחוץ על הכפתור מתחת כדי להתקדם. יישלח אימייל עם הוראות.",
+			"confirm": "למחוק את החשבון שלי",
+			"requestSuccess": "הבקשה התקבלה. יישלח אימייל עם הוראות.",
+			"passwordRequired": "נא להכניס סיסמתך.",
+			"confirmSuccess": "אישרת ביטול חשבונך בהצלחה. החשבון יתבטל בעוד שלושה ימים.",
+			"scheduled": "נבטל חשבון Vikunja שלך ב-{date} ({dateSince}).",
+			"scheduledCancel": "הקש כאן לבטל ביטול חשבונך.",
+			"scheduledCancelText": "הכנס סיסמתך להלן כדי לבטל את ביטול חשבונך:",
+			"scheduledCancelButton": "נא ללחוץ על הכפתור מתחת כדי לבטל את פעולת ביטול חשבונך.",
+			"scheduledCancelConfirm": "לבטל את פעולת ביטול חשבוני.",
+			"scheduledCancelSuccess": "לא נמחק חשבונך."
+		},
+		"export": {
+			"title": "יצוא נתוני Vikunja",
+			"description": "אפשר לבקש עותק של כל נתוני Vikunja שלך הכולל פרויקטים, מטלות וכל הקשור להם. ניתן לייבא נתונים אלו לכל מופע Vikunja דרך פעולת הניוד.",
+			"descriptionPasswordRequired": "נא להכניס סיסמה כדי להתקדם:",
+			"request": "בקשת עותק נתוני Vikunja שלי",
+			"success": "ביקשת נתוני Vikunja בהצלחה! יישלח לך אימייל כשיהיה מוכן להודה.",
+			"downloadTitle": "הורד נתוני Vikunja המיוצא שלך"
+		}
+	},
+	"project": {
+		"archivedMessage": "הפרויקט הזה מאוחסן בארכיב. לא ניתן ליצור או לערוך מטלות עבורו.",
+		"archived": "מאוחסן בארכיב",
+		"showArchived": "הראה מאוחסנים בארכיב",
+		"title": "כותרת",
+		"color": "צבע",
+		"projects": "פרויקטים",
+		"parent": "פרויקט אב",
+		"search": "הקלד כדי לחפש פרויקט…",
+		"searchSelect": "להקליק או ללחוץ enter לבחור את הפרויקט הזה",
+		"shared": "פרויקטים משותפים",
+		"noDescriptionAvailable": "חסר תיאור פרויקט.",
+		"inboxTitle": "תיבת נכנסים",
+		"favorite": "סימון פרויקט זה כמועדף",
+		"unfavorite": "להסיר פרויקט זה ממועדפים",
+		"openSettingsMenu": "לפתוח תפריט הגדרות",
+		"description": "תיאור פרויקט",
+		"favoriteDescription": "כל המטלות בפרויקט זה מסומנים כמועדפים.",
+		"create": {
+			"header": "פרויקט חדש",
+			"titlePlaceholder": "להכניס כאן כותרת של הפרויקט…",
+			"addTitleRequired": "נא לציין כותרת.",
+			"createdSuccess": "הפרויקט נוצר בהצלחה.",
+			"addProjectRequired": "נא לציין פרויקט או לקבוע פרויקט ברירת מחדל בהגדרות."
+		},
+		"archive": {
+			"title": "אחסון ״{project}״ בארכיון",
+			"archive": "לאחסן הפרויקט הזה",
+			"unarchive": "להוציא פרויקט זה מהארכיב",
+			"unarchiveText": "תוכל ליצור מטלות או לערוך.",
+			"archiveText": "לא ניתן לערוך פרויקט זה או ליצור מטלות עד הוצאתו מהארכיב.",
+			"success": "הפרויקט אוחסן בארכיב בהצלחה."
+		},
+		"background": {
+			"title": "לקביעת רקע לפרויקט",
+			"remove": "להסיר רקע",
+			"upload": "לבחור רקע מהמחשב",
+			"searchPlaceholder": "חיפוש רקע…",
+			"loadMore": "להטעין עוד צילומים",
+			"success": "רקע נקבע בהצלחה!",
+			"removeSuccess": "רקע הוסר בהצלחה!"
+		},
+		"delete": {
+			"title": "מחיקת ״{project}״",
+			"header": "למחוק פרויקט זה",
+			"text1": "בטוח למחוק פרויקט זה וכל תכולתו?",
+			"text2": "זהירות! זה כולל כל המטלות ולא ניתן לשחזר אחר כך!",
+			"success": "הפרויקט נמחק בהצלחה.",
+			"tasksToDelete": "פעולה זו ימחק בערך {count} מטלות ללא אפשרות שחזור.",
+			"tasksAndChildProjectsToDelete": "פעולה זו ימחק בערך {tasks} מטלות ו-{projects} פרויקטים ללא אפשרות שחזור.",
+			"noTasksToDelete": "אין בפרויקט זה מטלות כלשהן, ניתן למחוק בבטחה."
+		},
+		"duplicate": {
+			"title": "שכפול פרויקט",
+			"label": "שכפול",
+			"text": "לבחור פרויקט אב להכיל את הפרויקט המשוכפל:",
+			"success": "הפרויקט שוכפל בהצלחה."
+		},
+		"edit": {
+			"header": "עריכת פרויקט זה",
+			"title": "עריכת ״{project}״",
+			"titlePlaceholder": "כותרת הפרויקט נכנסת כאן…",
+			"identifierTooltip": "מזהה פרויקט משמש לזיהוי מטלה בתוך פרויקטים. לא בשימוש אם ריק.",
+			"identifier": "מזהה פרויקט",
+			"identifierPlaceholder": "מזהה פרויקט נכנס פה…",
+			"description": "תיאור",
+			"descriptionPlaceholder": "הכנס תיאור לפרויקט, ללחוץ ׳/׳ לעוד אופציות…",
+			"color": "צבע",
+			"success": "הפרויקט עודכן בהצלחה."
+		},
+		"share": {
+			"header": "תשתף פרויקט הזה",
+			"title": "שיתוף ״{project}״",
+			"share": "שיתוף",
+			"links": {
+				"title": "לשתף לינקים",
+				"what": "מהו לינק משותף?",
+				"explanation": "שיתוף לינקים מאפשר לשתף פרויקט עם משתמשים אחרים בלי חשבון Vikunja.",
+				"create": "ליצור לינק לשיתוף",
+				"name": "שם (אופציונלי)",
+				"namePlaceholder": "למשל פלוני אלמוני",
+				"nameExplanation": "כל הפעולות הנעשות על ידי לינק שיתוף זה יופיעו עם השם.",
+				"password": "סיסמה (אופציונלי)",
+				"passwordExplanation": "כשנכנסים למערכת, המשתמש יצטרך להכניס את הסיסמה הזאת.",
+				"noName": "לא נקבע שם",
+				"remove": "לסלק לינק לשיתוף",
+				"removeText": "בטוח שברצונך לסלק את הלינק לשיתוף הזה? לא תהיה עוד גישה לפרויקט עם הלינק לשיתוף הזה. לא ניתן לבטל פעולה זו!",
+				"createSuccess": "לינק לשיתוף נוצר בהצלחה.",
+				"deleteSuccess": "לינק לשיתוף נמחק בהצלחה",
+				"view": "תצוגה",
+				"sharedBy": "משותף על ידי {0}"
+			},
+			"userTeam": {
+				"typeUser": "משתמש | משתמשים",
+				"typeTeam": "צוות | צוותים",
+				"shared": "משותף עם אלו {type}",
+				"you": "את/ה",
+				"notShared": "לא משותף עדיין עם {type} כלשהו.",
+				"removeHeader": "להוריד {type} מה-{sharable}",
+				"removeText": "בטוח שברצונך לסלק את ה-{sharable} הזה מה-{type}? לא ניתן לביטול.",
+				"removeSuccess": "ה-{sharable} סולק בהצלחה מה-{type}.",
+				"addedSuccess": "ה-{type} נתווסף בהצלחה.",
+				"updatedSuccess": "ה-{type} נתווסף בהצלחה."
+			},
+			"attributes": {
+				"link": "לינק",
+				"delete": "מחיקה"
+			}
+		},
+		"first": {
+			"title": "מבט ראשון"
+		},
+		"list": {
+			"title": "רשימה",
+			"add": "הוסף",
+			"addPlaceholder": "הוסף מטלה…",
+			"empty": "פרויקט זה כרגע ריק.",
+			"newTaskCta": "יצירת מטלה.",
+			"editTask": "עריכת מטלה"
+		},
+		"gantt": {
+			"title": "גאנט",
+			"size": "גודל",
+			"default": "ברירת מחדל",
+			"month": "חודש",
+			"day": "יום",
+			"hour": "שעה"
+		},
+		"table": {
+			"title": "טבלה",
+			"columns": "עמודים"
+		},
+		"kanban": {
+			"title": "קאנבאן",
+			"limit": "הגבלה: {limit}",
+			"doneBucket": "דלי גמורים",
+			"doneBucketHint": "דלי גמורים נשמר בהצלחה.",
+			"doneBucketHintExtended": "כל המטלות המוכנסות לדלי הגמורים יסומנו אוטומטית כגמורים. כל המטלות המסומנות כגמורים מבחוץ יוזזו גם.",
+			"doneBucketSavedSuccess": "דלי גמורים נשמר בהצלחה.",
+			"defaultBucket": "דלי ברירת מחדל",
+			"defaultBucketHint": "מטלות ללא סימון דלי יתווספו לדלי הזה.",
+			"defaultBucketSavedSuccess": "דלי ברירת מחדל נשמר בהצלחה.",
+			"deleteLast": "לא ניתן למחוק את הדלי האחרון.",
+			"addTaskPlaceholder": "הכנס כותרת חדשה למטלה…",
+			"addTask": "הוספת מטלה",
+			"addAnotherTask": "הוספת מטלה נוספת",
+			"addBucket": "יצירת דלי",
+			"addBucketPlaceholder": "הכנס שם חדש לדלי…",
+			"deleteHeaderBucket": "מחיקת דלי",
+			"deleteBucketText1": "בטוח למחוק דלי זה?",
+			"deleteBucketText2": "זה לא ימחוק מטלות אבל יזיז אותן לדלי ברירת מחדל.",
+			"deleteBucketSuccess": "דלי נמחק בהצלחה.",
+			"bucketTitleSavedSuccess": "שם הדלי נשמר בהצלחה.",
+			"bucketLimitSavedSuccess": "תחום הדלי נשמר בהצלחה.",
+			"collapse": "למוטט הדלי הזה",
+			"bucketLimitReached": "הגעת לקצה קיבולת הדלי. להוריד מטלות או להגדיל תחום כדי להוסיף מטלות חדשות."
+		},
+		"pseudo": {
+			"favorites": {
+				"title": "מועדפים"
+			}
+		},
+		"webhooks": {
+			"targetUrl": "URL יעד",
+			"targetUrlInvalid": "נא לספק URL תקין.",
+			"events": "אירועים",
+			"mustSelectEvents": "עליך לבחור אירוע אחד לפחות.",
+			"secret": "סוד",
+			"secretDocs": "עוד מידע על איך להשתמש בסודות קיים בתיעוד."
+		},
+		"views": {
+			"header": "עריכת תצוגות",
+			"title": "כותרת",
+			"actions": "פעולות",
+			"kind": "סוג",
+			"bucketConfigMode": "מוד קינפוג דלי",
+			"bucketConfig": "קינפוג דלי",
+			"bucketConfigManual": "ידני",
+			"filter": "מסנן",
+			"create": "יצירת תצוגה",
+			"createSuccess": "התצוגה נוצרה בהצלחה.",
+			"titleRequired": "נא לספק כותרת.",
+			"delete": "מחיקת התצוגה הזאת",
+			"deleteText": "בטוח שברצונך למחוק תצוגה זו? לא יהיה ניתן עוד להשתמש בו לצפות במטלות בפרויקט זה. פעולה זו לא ימחק מטלות. לא ניתן לבטל פעולה זו!",
+			"deleteSuccess": "התצוגה נמחקה בהצלחה.",
+			"onlyAdminsCanEdit": "רק מנהלי פרויקטים רשאים לערוך תצוגות.",
+			"updateSuccess": "התצוגה עודכנה בהצלחה."
+		}
+	},
+	"filters": {
+		"title": "מסננים",
+		"clear": "לאפס מסננים",
+		"showResults": "הצגת תוצאות",
+		"fromView": "יש גם סט מסנן לתצוגה הנוכחית:",
+		"fromViewBoth": "ישמש ביחד עם מה שמוכנס כאן.",
+		"attributes": {
+			"title": "כותרת",
+			"titlePlaceholder": "כותרת המסנן השמור מופיעה פה…",
+			"description": "תיאור",
+			"descriptionPlaceholder": "להוסיף תיאור למסנן כאן, הקש ׳/׳ לאופציות נוספות…",
+			"includeNulls": "להכליל מטלות בלי ערך קבוע"
+		},
+		"create": {
+			"title": "מסנן שמור חדש",
+			"description": "מסנן שמור הנו פרויקט וירטואלי המחושב מתוך סט מסננים בכל גישה.",
+			"action": "יצירת מסנן שמור",
+			"titleRequired": "נא לספק כותרת למסנן."
+		},
+		"delete": {
+			"header": "למחוק מסנן שמור הזה",
+			"text": "בטוח שברצונך למחוק מסנן שמור הזה?",
+			"success": "מסנן שמור נמחק בהצלחה."
+		},
+		"edit": {
+			"title": "עריכת מסנן שמור הזה",
+			"success": "המסנן נשמר בהצלחה."
+		},
+		"query": {
+			"placeholder": "הכנס חיפוש או שאילתא מסנן…",
+			"help": {
+				"intro": "לסנן מטלות, ניתן להשתמש בתחביר שאילתא הדומה ל-SQL. שדות הניתנים לסינון כוללים:",
+				"link": "כיצד זה פועל?",
+				"canUseDatemath": "אפשר להשתמש בחשבון תאריכים כדי לקבוע תאריכים יחסיים. הקש על התאריך בשאילתא לעוד מידע.",
+				"fields": {
+					"done": "אם המטלה הסתיימה או לא",
+					"priority": "רמת עדיפות של המטלה (1-5)",
+					"percentDone": "אחוז סיום למטלה (0-100)",
+					"dueDate": "תאריך יעד של המטלה",
+					"startDate": "תאריך התחלה של המטלה",
+					"endDate": "תאריך סיום של המטלה",
+					"doneAt": "תאריך ושעה שהסתיימה המטלה",
+					"assignees": "הממונים על המטלה",
+					"labels": "התווים המיוחסים למטלה",
+					"reminders": "תזכורות למטלה כשדה תאריך יחזירו כל המטלות עם לפחות תזכורת אחת התואמת את השאילתא",
+					"created": "תאריך ושעה של יצירת המטלה",
+					"updated": "תאריך ושעה של שינוי אחרון במטלה"
+				},
+				"operators": {
+					"intro": "אוֹפֶּרָטוֹרים זמינים לסינון כוללים:",
+					"notEqual": "לא שווה ל ",
+					"equal": "שווה ל ",
+					"greaterThan": "גדול מ ",
+					"greaterThanOrEqual": "גדול או יותר",
+					"lessThan": "פחות מ ",
+					"lessThanOrEqual": "פחות או שווה ל "
+				},
+				"logicalOperators": {
+					"intro": "אפשר להשתמש באופרטורים הבאים כדי לחבר ריבוי תנאים:",
+					"and": "אופרטור AND מתאים אם כל התנאים אמת",
+					"or": "אופרטור OR מתאים אם לפחות אחד מהתנאים אמת",
+					"parentheses": "סוגריים לקיבוץ תנאים"
+				},
+				"examples": {
+					"intro": "להלן דוגמאות של שאילתות מסנן:",
+					"priorityEqual": "מתאים מטלות עם רמת עדיפות 4",
+					"dueDatePast": "מתאים למטלות עם תאריך יעד בעבר",
+					"undoneHighPriority": "מתאים מטלות לא גמורות עם רמת עדיפות 3 או יותר",
+					"assigneesIn": "מתאים מטלות המוטלות על ״user1״ או ״user2״",
+					"priorityOneOrTwoPastDue": "מתאים מטלות עם רמת עדיפות 1 או 2 עם תאריך יעד בעבר"
+				}
+			}
+		}
+	},
+	"migrate": {
+		"title": "ייבוא משירותים אחרים",
+		"titleService": "לייבוא הנתונים שלך מ-{name} ל-Vikunja",
+		"description": "הקלק על הלוגו של אחד משירותי צד שלישי למטה כדי להתחיל.",
+		"descriptionDo": "Vikunja תייבא כל הרשימות, מטלות, רשומות, תזכורות וקבצים שיש לך הרשאת גישה אליהם.",
+		"authorize": "הקש למטה כדי להרשות ל-Vikunja גישה לחשבון {name}.",
+		"getStarted": "התחל",
+		"inProgress": "יבוא בפעולה…",
+		"alreadyMigrated1": "נראה שכבר ייבאת החומר שלך מ-{name} בתאריך {date}.",
+		"alreadyMigrated2": "ייבוא חוזר אפשרי אבל יכול ליצור כפילויות. בטוח?",
+		"confirm": "כן, בטוח. התחל ניוד כעת!",
+		"importUpload": "כדי לייבא נתונים בשם {name} לתוך Vikunja, יש ללחוץ על הכפתור מתחת לבחור קובץ.",
+		"upload": "העלאת קובץ",
+		"migrationStartedWillReciveEmail": "Vikunja תייבא כעת רשימות/פרויקטים, מטלות, רשומות, תזכורות וקבצים שלך משירות {service}",
+		"migrationInProgress": "ניוד מתנהל כעת. נא להמתין עד סיומו."
+	},
+	"label": {
+		"title": "תוויות",
+		"manage": "ניהול תוויות",
+		"description": "הקש על תווית כדי לערוך אותה. ניתן לערוך כל התוויות שיצרת וניתן להשתמש בכל התוויות המשויכות למטלה בתוך פרויקט אליו יש לך הרשאת גישה.",
+		"newCTA": "אין לך כרגע תוויות כלשהן.",
+		"create": {
+			"header": "תווית חדשה",
+			"title": "יצירת תווית",
+			"titleRequired": "נא לציין כותרת.",
+			"success": "התווית נוצרה בהצלחה."
+		},
+		"edit": {
+			"header": "עריכת תווית",
+			"success": "התווית עודכנה בהצלחה."
+		},
+		"deleteSuccess": "התווית נמחקה בהצלחה.",
+		"attributes": {
+			"title": "כותרת",
+			"titlePlaceholder": "כותרת התווית נכנסת כאן…",
+			"description": "תיאור",
+			"color": "צבע"
+		}
+	},
+	"sharing": {
+		"authenticating": "מאמת…",
+		"passwordRequired": "פרויקט משותף חייב סיסמה. הכנס למטה:",
+		"error": "אירעה שגיאה.",
+		"invalidPassword": "סיסמה לא תקינה."
+	},
+	"navigation": {
+		"overview": "מבט על",
+		"upcoming": "מתקרב",
+		"settings": "הגדרות",
+		"privacy": "מדיניות פרטיות"
+	},
+	"misc": {
+		"loading": "בטעינה…",
+		"save": "שמירה",
+		"delete": "מחיקה",
+		"confirm": "אישור",
+		"cancel": "ביטול",
+		"disable": "חסימה",
+		"copy": "העתקה",
+		"copyError": "העתקה נכשלה",
+		"searchPlaceholder": "הקש כדי לחפש…",
+		"previous": "הקודם",
+		"next": "הבא",
+		"create": "יצירה",
+		"doit": "לך על זה!",
+		"saving": "בשמירה…",
+		"saved": "שמור!",
+		"default": "ברירת מחדל",
+		"close": "סגירה",
+		"download": "הורדה",
+		"showMenu": "הצג תפריט",
+		"hideMenu": "הסתר תפריט",
+		"forExample": "למשל:",
+		"welcomeBack": "ברוך שובך!",
+		"custom": "מיוחד",
+		"id": "זיהוי",
+		"created": "נוצר ב ",
+		"createdBy": "נוצר על ידי {0}",
+		"actions": "פעולות",
+		"cannotBeUndone": "פעולה זו לא ניתנת לביטול!",
+		"avatarOfUser": "צילום פרופיל של {user}"
+	},
+	"input": {
+		"resetColor": "לאפס צבע",
+		"datepicker": {
+			"today": "היום",
+			"tomorrow": "מחר",
+			"nextMonday": "יום שני הבא",
+			"thisWeekend": "סוף שבוע זה",
+			"laterThisWeek": "מאוחר יותר השבוע",
+			"nextWeek": "שבוע הבא",
+			"chooseDate": "לבחור תאריך"
+		},
+		"editor": {
+			"edit": "עריכה",
+			"heading1": "כותרת 1",
+			"heading1Tooltip": "כותרת קטע גדול.",
+			"heading2": "כותרת 2",
+			"heading2Tooltip": "כותרת קטע אמצעי.",
+			"heading3": "כותרת 3",
+			"heading3Tooltip": "כותרת קטע קטן יותר.",
+			"bold": "מודגש",
+			"italic": "נטוי",
+			"underline": "קו תחתון",
+			"code": "קוד",
+			"quote": "ציטוט",
+			"quoteTooltip": "לתפוס ציטוט.",
+			"bulletList": "רשימת תבליטים",
+			"bulletListTooltip": "ליצירת רשימת תבליטים פשוטה.",
+			"orderedList": "רשימה ממוינת",
+			"orderedListTooltip": "יצירת רשימה עם מספור.",
+			"link": "לינק",
+			"image": "תמונה",
+			"imageTooltip": "העלאת תמונה מהמחשב שלך.",
+			"horizontalRule": "שורה רוחבית",
+			"horizontalRuleTooltip": "חילוק קטע.",
+			"text": "טקסט",
+			"textTooltip": "התחל לכתוב עם טקסט פשוט.",
+			"taskList": "רשימת מטלות",
+			"taskListTooltip": "לעקוב אחר מטלות עם רשימת מטלות to-do.",
+			"undo": "לְבַטֵל",
+			"redo": "לַעֲשׂוֹת שׁוּב",
+			"placeholder": "לכתוב טקסט או הקש ׳/׳ לקבל אופציות נוספות…",
+			"table": {
+				"title": "טבלה",
+				"insert": "הכנסת טבלה",
+				"addColumnBefore": "הוספת טור לפני",
+				"addColumnAfter": "הוספת טור אחרי",
+				"deleteColumn": "מחיקת טור",
+				"addRowBefore": "הוספת שורה לפני",
+				"addRowAfter": "הוספת שורה אחרי",
+				"deleteRow": "מחיקת שורה",
+				"deleteTable": "מחיקת טבלה",
+				"mergeCells": "מיזוג תאים",
+				"splitCell": "פיצול תא",
+				"toggleHeaderColumn": "לְמַתֵג טור כותרת",
+				"toggleHeaderRow": "לְמַתֵג שורת כותרת",
+				"toggleHeaderCell": "לְמַתֵג תא כותרת",
+				"mergeOrSplit": "מיזוג או פיצול",
+				"fixTables": "תיקון טבלאות"
+			}
+		},
+		"multiselect": {
+			"createPlaceholder": "יצירה",
+			"selectPlaceholder": "הקלק או ללחוץ enter לבחור"
+		},
+		"datepickerRange": {
+			"to": "עד",
+			"from": "מ…",
+			"fromto": "מ {from} ל {to}",
+			"date": "תאריך",
+			"ranges": {
+				"today": "היום",
+				"thisWeek": "השבוע",
+				"restOfThisWeek": "המשך השבוע",
+				"nextWeek": "שבוע הבא",
+				"next7Days": "שבעת הימים הקרובים",
+				"lastWeek": "שבוע שעבר",
+				"thisMonth": "החודש",
+				"restOfThisMonth": "המשך החודש",
+				"nextMonth": "חודש הבא",
+				"next30Days": "30 הימים הבאים",
+				"lastMonth": "חודש שעבר",
+				"thisYear": "השנה",
+				"restOfThisYear": "המשך השנה"
+			},
+			"values": {
+				"now": "עכשיו",
+				"startOfToday": "תחילת היום",
+				"endOfToday": "סוף היום",
+				"beginningOflastWeek": "תחילת השבוע שעבר",
+				"endOfLastWeek": "סוף שבוע שעבר",
+				"beginningOfThisWeek": "תחילת השבוע",
+				"endOfThisWeek": "סוף השבוע",
+				"startOfNextWeek": "תחילת שבוע הבא",
+				"endOfNextWeek": "סוף שבוע הבא",
+				"in7Days": "בעוד 7 ימים",
+				"beginningOfLastMonth": "תחילת החודש העבר",
+				"endOfLastMonth": "סוף החודש שעבר",
+				"startOfThisMonth": "תחילת החודש הנוכחי",
+				"endOfThisMonth": "סוף החודש הנוכחי",
+				"startOfNextMonth": "תחילת החודש הבא",
+				"endOfNextMonth": "סוף החודש הבא",
+				"in30Days": "בעוד 30 ימים",
+				"startOfThisYear": "תחילת השנה",
+				"endOfThisYear": "סוף השנה"
+			}
+		},
+		"datemathHelp": {
+			"canuse": "ניתן להשתמש בחשבון תאריכים כדי לסנן תאריכים יחסיים.",
+			"learnhow": "לבדוק כיצד זה פועל",
+			"title": "חשבון תאריך",
+			"similar": "ביטויים אלו דומים לאלו אשר סופקו על ידי {0} ו {1}.",
+			"add1Day": "הוספת יום אחד",
+			"minus1Day": "החסרת יום אחד",
+			"roundDay": "עיגול מטה ליום הקרוב ביותר",
+			"supportedUnits": "יחידות זמן נתמכות",
+			"someExamples": "דוגמאות של ביטויי זמן",
+			"units": {
+				"seconds": "שניות",
+				"minutes": "דקות",
+				"hours": "שעות",
+				"days": "ימים",
+				"weeks": "שבועות",
+				"months": "חודשים",
+				"years": "נים"
+			},
+			"examples": {
+				"now": "בדיוק עכשיו",
+				"in24h": "בעוד 24 שעות",
+				"today": "היום בשעה 00:00",
+				"beginningOfThisWeek": "תחילת השבוע בשעה 00:00",
+				"endOfThisWeek": "בסוף השבוע הזה",
+				"in30Days": "בעוד 30 ימים",
+				"datePlusMonth": "{0} פלוס חודש בשעה 00:00 של אותו יום"
+			}
+		}
+	},
+	"task": {
+		"new": "יצירת מטלה",
+		"createSuccess": "המטלה נוצרה בהצלחה.",
+		"addReminder": "הוספת תזכורת…",
+		"doneSuccess": "המטלה סומנה בהצלחה כגמורה.",
+		"undoneSuccess": "בוטל סימון המטלה כגמורה.",
+		"checklistTotal": "{checked} מתוך {total} מטלות",
+		"checklistAllDone": "{total} מטלות",
+		"show": {
+			"titleCurrent": "מטלות עדכניות",
+			"overdue": "הצג מטלות באיחור",
+			"fromuntil": "מטלות מ-{from} ועד {until}",
+			"select": "בחירת טווח תאריכים",
+			"noTasks": "אין שום דבר לעשות - יום נעים!"
+		},
+		"detail": {
+			"chooseDueDate": "הקלק כאן כדי לקבוע תאריך יעד",
+			"chooseStartDate": "הקלק כאן כדי לקבוע תאריך התחלה",
+			"chooseEndDate": "הקלק כאן כדי לקבוע תאריך סיום",
+			"move": "העבר מטלה לפרויקט אחר",
+			"done": "לסמן מטלה כמושלמת!",
+			"undone": "סימון כלא גמור",
+			"created": "נוצר {0} על ידי {1}",
+			"updated": "{0} עודכן",
+			"doneAt": "{0} הסתיים",
+			"updateSuccess": "המטלה נשמרה בהצלחה.",
+			"deleteSuccess": "המטלה נמחקה בהצלחה.",
+			"belongsToProject": "מטלה זו שייכת לפרויקט ׳{project}׳",
+			"due": "תאריך יעד ב-{at}",
+			"organization": "שם ארגון",
+			"management": "ניהול",
+			"dateAndTime": "תאריך ושעה",
+			"delete": {
+				"header": "למחוק מטלה זו",
+				"text1": "בטוח שברצונך למחוק מטלה זו?"
+			},
+			"actions": {
+				"assign": "לשייך למשתמש",
+				"label": "הוספת תווים",
+				"priority": "קביעת עדיפות",
+				"dueDate": "קביעת תאריך יעד",
+				"startDate": "קביעת תאריך התחלה",
+				"endDate": "קביעת תאריך סיום",
+				"reminders": "קביעת תזכורות",
+				"repeatAfter": "קביעת מרווח חזרות",
+				"percentDone": "קביעת התקדמות",
+				"attachments": "צירוף מצורפים",
+				"relatedTasks": "הוספת יחוס",
+				"moveProject": "הזזה",
+				"color": "קביעת צבע",
+				"delete": "מחיקה",
+				"favorite": "הוספה למועדפים",
+				"unfavorite": "הסרה ממועדפים"
+			}
+		},
+		"attributes": {
+			"color": "צבע",
+			"created": "נוצר",
+			"createdBy": "נוצר על ידי",
+			"description": "תיאור",
+			"done": "הסתיים",
+			"dueDate": "תאריך יעד",
+			"endDate": "תאריך סיום",
+			"labels": "תוויות",
+			"percentDone": "התקדמות",
+			"priority": "עדיפות",
+			"relatedTasks": "מטלות קשורות",
+			"reminders": "תזכורות",
+			"repeat": "חזרות",
+			"startDate": "תאריך התחלה",
+			"title": "כותרת",
+			"updated": "מעודכן",
+			"doneAt": "הסתיים ב"
+		},
+		"subscription": {
+			"subscribedProject": "את/ה מנוי/ה לפרויקט הזה כעת ותקבל הודעות על שינויים.",
+			"notSubscribedProject": "אינך מנוי/ה לפרויקט ולא תקבל/י הודעות על שינויים.",
+			"subscribedTask": "את/ה מנוי/ה כעת למטלה הזו ותקבל/י הודעות על שינויים.",
+			"notSubscribedTask": "את/ה לא מנוי/ה כעת למטלה הזו ולא תקבל/י הודעות על שינויים.",
+			"subscribe": "הרשמה",
+			"unsubscribe": "ביטול הרשמה",
+			"subscribeSuccessProject": "את/ה מנוי/ה לפרויקט הזה כעת",
+			"unsubscribeSuccessProject": "בוטל מנוי שלך לפרויקט הזה",
+			"subscribeSuccessTask": "את/ה מנוי/ה כעת למטלה הזו",
+			"unsubscribeSuccessTask": "בוטל מנוי שלך למטלה הזו"
+		},
+		"attachment": {
+			"title": "מצורפים",
+			"createdBy": "נוצר {0} על יד {1}",
+			"downloadTooltip": "הורדת מצורף זה",
+			"upload": "העלאת מצורף",
+			"drop": "לשחרר קבצים להעלאה כאן",
+			"delete": "למחוק מצורף",
+			"deleteTooltip": "למחיקת מצורף זה",
+			"deleteText1": "בטוח שברצונך לבטל מצורף {filename}?",
+			"copyUrlTooltip": "העתקת url של מצורף זה לשימוש בטקסט",
+			"successfullyChangedCoverImage": "תמונת שער שונה בהצלחה.",
+			"usedAsCover": "תמונת שער"
+		},
+		"comment": {
+			"title": "הערות",
+			"loading": "טוען הערות…",
+			"edited": "נערך {date}",
+			"creating": "יוצר הערה…",
+			"placeholder": "הוספת הערתך, הקש ׳/׳ לאופציות נוספות…",
+			"comment": "הערה",
+			"delete": "מחיקת הערה זו",
+			"deleteText1": "בטוח שברצונך למחוק הערה זו?",
+			"deleteSuccess": "ההערה נמחקה בהצלחה.",
+			"addedSuccess": "ההערה נתווספה בהצלחה."
+		},
+		"deferDueDate": {
+			"title": "דחיית תאריך יעד",
+			"1day": "יום אחד",
+			"3days": "3 ימים",
+			"1week": "שבוע אחד"
+		},
+		"description": {
+			"placeholder": "הכנסת תיאור, הקש ׳/׳ לעוד אפשרויות…"
+		},
+		"assignee": {
+			"placeholder": "הכנס כדי לייחס משתמש…"
+		},
+		"priority": {
+			"low": "נמוך",
+			"medium": "בינוני",
+			"high": "גבוה",
+			"urgent": "דחוף",
+			"doNow": "לעשות מיידית!"
+		},
+		"reminder": {
+			"dateAndTime": "תאריך ושעה"
+		},
+		"repeat": {
+			"everyDay": "כל יום",
+			"everyWeek": "כל שבוע",
+			"every30d": "כל 30 ימים",
+			"monthly": "חודשי",
+			"fromCurrentDate": "מתאריך סיום",
+			"specifyAmount": "קביעת כמות…",
+			"hours": "שעות",
+			"days": "ימים",
+			"weeks": "שבועות",
+			"invalidAmount": "נא להכניס יותר מאפס."
+		}
+	},
+	"team": {
+		"title": "צוותים",
+		"noTeams": "אינך משויך לאף צוות.",
+		"create": {
+			"title": "יצירת צוות",
+			"success": "הצוות נוצר בהצלחה."
+		},
+		"edit": {
+			"title": "עריכת צוות ״{team}״",
+			"members": "חברי הצוות",
+			"search": "הכנס לחפש משתמש…",
+			"addUser": "הוסף לצוות",
+			"makeMember": "הפוך לחבר",
+			"makeAdmin": "הפוך למנהל",
+			"success": "הצוות עודכן בהצלחה.",
+			"userAddedSuccess": "חבר התווסף לצוות בהצלחה."
+		}
+	}
+}

@@ -1,0 +1,34 @@
+{
+    "go.testEnvVars": {
+        "VIKUNJA_SERVICE_ROOTPATH": "${workspaceRoot}"
+    },
+    "editor.formatOnSave": false,
+    "editor.codeActionsOnSave": {
+        "source.fixAll": "explicit"
+    },
+    "eslint.format.enable": true,
+    "[javascript]": {
+        "editor.defaultFormatter": "vscode.typescript-language-features"
+    },
+    "[typescript]": {
+        "editor.defaultFormatter": "vscode.typescript-language-features"
+    },
+
+    // https://eslint.vuejs.org/user-guide/#editor-integrations
+    "eslint.validate": [
+        "javascript",
+        "javascriptreact",
+        "vue"
+    ],
+
+    // disable vetur in case it's installed
+    "vetur.validation.template": false,
+
+    // i18n ally
+    "i18n-ally.localesPaths": [
+        "frontend/src/i18n/lang"
+    ],
+    "i18n-ally.sortKeys": true,
+    "i18n-ally.keepFulfilled": true,
+    "i18n-ally.keystyle": "nested"
+}

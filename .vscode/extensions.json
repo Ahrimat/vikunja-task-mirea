@@ -1,0 +1,14 @@
+{
+    "recommendations": [
+        "Syler.sass-indented",
+        "codezombiech.gitignore",
+        "dbaeumer.vscode-eslint",
+        "editorconfig.editorconfig",
+        "golang.Go",
+        "lokalise.i18n-ally",
+        "mikestead.dotenv",
+        "mkhl.direnv",
+        "vitest.explorer",
+        "vue.volar"
+    ]
+}

@@ -1,0 +1,217 @@
+// Vikunja is a to-do list application to facilitate your life.
+// Copyright 2018-present Vikunja and contributors. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+package migration
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strings"
+
+	"code.vikunja.io/api/pkg/files"
+	"code.vikunja.io/api/pkg/log"
+	"code.vikunja.io/api/pkg/utils"
+)
+
+const (
+	errorBodyLogLimit  = 4096
+	errorBodyReadLimit = 1 << 20
+)
+
+// ErrRedirectRefused is what a client's CheckRedirect policy returns when it refuses a redirect.
+var ErrRedirectRefused = fmt.Errorf("%w: redirect refused", utils.ErrDoNotRetry)
+
+func truncateForLog(body []byte) string {
+	if len(body) > errorBodyLogLimit {
+		return string(body[:errorBodyLogLimit])
+	}
+	return string(body)
+}
+
+// DownloadFile downloads a file and returns its contents
+func DownloadFile(url string) (buf *bytes.Buffer, err error) {
+	return DownloadFileWithHeaders(url, nil)
+}
+
+// DownloadFileWithHeaders downloads a file and allows you to pass in headers
+func DownloadFileWithHeaders(url string, headers http.Header) (buf *bytes.Buffer, err error) {
+	resp, err := getFile(utils.NewSSRFSafeHTTPClient(), url, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	buf = &bytes.Buffer{}
+	_, err = buf.ReadFrom(resp.Body)
+
+	return
+}
+
+// Pass a client with a redirect policy when the headers carry credentials: go replays them across hosts.
+func DownloadFileWithHeadersLimited(hc *http.Client, url string, headers http.Header, maxBytes int64) (*bytes.Buffer, error) {
+	resp, err := getFile(hc, url, headers)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("could not download %s: %w", url, NewErrUpstreamRequestFailed("upstream", resp.StatusCode, ""))
+	}
+
+	buf := &bytes.Buffer{}
+	read, err := io.Copy(buf, io.LimitReader(resp.Body, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if read > maxBytes {
+		return nil, files.ErrFileIsTooLarge{Size: uint64(read)} //nolint:gosec // read is never negative
+	}
+
+	return buf, nil
+}
+
+func getFile(hc *http.Client, url string, headers http.Header) (*http.Response, error) {
+	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
+	if err != nil {
+		return nil, err
+	}
+
+	for key, h := range headers {
+		for _, hh := range h {
+			req.Header.Add(key, hh)
+		}
+	}
+
+	return hc.Do(req) //nolint:bodyclose,gosec // Caller closes the body, SSRF protection is handled by the SSRF-safe client
+}
+
+// DoPost makes a form encoded post request
+func DoPost(url string, form url.Values) (resp *http.Response, err error) {
+	return DoPostWithHeaders(url, form, map[string]string{})
+}
+
+// DoGetWithHeaders makes an HTTP GET request with custom headers
+func DoGetWithHeaders(urlStr string, headers map[string]string) (resp *http.Response, err error) {
+	return DoGetWithClient(utils.NewSSRFSafeHTTPClient(), urlStr, headers)
+}
+
+// DoGetWithClient is DoGetWithHeaders with a caller-provided client, e.g. one with a redirect policy
+// so credential headers are not replayed across hosts.
+func DoGetWithClient(hc *http.Client, urlStr string, headers map[string]string) (resp *http.Response, err error) {
+	err = utils.RetryWithBackoff("HTTP GET "+urlStr, func() error {
+		req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodGet, urlStr, nil)
+		if reqErr != nil {
+			return reqErr
+		}
+
+		for key, value := range headers {
+			req.Header.Add(key, value)
+		}
+
+		resp, err = hc.Do(req) //nolint:bodyclose,gosec // Caller is responsible for closing on success, URL is from migration provider API
+		if err != nil {
+			return err
+		}
+
+		// Log 4xx errors for debugging
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodyReadLimit))
+			resp.Body.Close()
+			// Re-create the body, capped, so the caller can still decode it
+			resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			log.Debugf("[Migration] HTTP GET %s returned %d: %s", urlStr, resp.StatusCode, truncateForLog(bodyBytes))
+			return nil // Don't retry on 4xx
+		}
+
+		// Retry on 5xx status codes, include response body in error
+		if resp.StatusCode >= 500 {
+			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodyLogLimit))
+			resp.Body.Close()
+			return NewErrUpstreamRequestFailed("upstream", resp.StatusCode, string(bodyBytes))
+		}
+
+		return nil
+	})
+
+	return resp, err
+}
+
+// DoPostWithHeaders does an api request and allows to pass in arbitrary headers
+func DoPostWithHeaders(urlStr string, form url.Values, headers map[string]string) (resp *http.Response, err error) {
+	hc := utils.NewSSRFSafeHTTPClient()
+
+	err = utils.RetryWithBackoff("HTTP POST "+urlStr, func() error {
+		req, reqErr := http.NewRequestWithContext(context.Background(), http.MethodPost, urlStr, strings.NewReader(form.Encode()))
+		if reqErr != nil {
+			return reqErr
+		}
+
+		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+
+		for key, value := range headers {
+			req.Header.Add(key, value)
+		}
+
+		resp, err = hc.Do(req) //nolint:bodyclose,gosec // Caller is responsible for closing on success, URL is from migration provider API
+		if err != nil {
+			return err
+		}
+
+		// Log 4xx errors for debugging
+		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
+			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodyReadLimit))
+			resp.Body.Close()
+			// Re-create the body, capped, so the caller can still decode it
+			resp.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+			log.Debugf("[Migration] HTTP POST %s returned %d: %s", urlStr, resp.StatusCode, truncateForLog(bodyBytes))
+			return nil // Don't retry on 4xx
+		}
+
+		// Retry on 5xx status codes, include response body in error
+		if resp.StatusCode >= 500 {
+			bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, errorBodyLogLimit))
+			resp.Body.Close()
+			return NewErrUpstreamRequestFailed("upstream", resp.StatusCode, string(bodyBytes))
+		}
+
+		return nil
+	})
+
+	return resp, err
+}
+
+var ErrResponseTooLarge = errors.New("response body was too large")
+
+func DecodeJSONLimited(body io.Reader, out any, maxBytes int64) error {
+	limited := &io.LimitedReader{R: body, N: maxBytes + 1}
+	if err := json.NewDecoder(limited).Decode(out); err != nil {
+		if limited.N <= 0 {
+			return ErrResponseTooLarge
+		}
+		return err
+	}
+	// json.Decode can succeed having consumed the whole limit, e.g. on trailing whitespace
+	if limited.N <= 0 {
+		return ErrResponseTooLarge
+	}
+	return nil
+}

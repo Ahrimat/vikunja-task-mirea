@@ -1,0 +1,18 @@
+files/
+dist/
+logs/
+docs/
+.devenv/
+.direnv/
+.idea/
+
+Dockerfile
+docker-manifest.tmpl
+docker-manifest-unstable.tmpl
+*.db
+*.zip
+
+# Frontend
+/frontend/node_modules/
+/frontend/.direnv
+/frontend/dist

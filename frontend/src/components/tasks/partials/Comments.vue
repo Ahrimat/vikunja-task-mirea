@@ -1,0 +1,649 @@
+<template>
+	<div
+		v-if="enabled"
+		ref="commentsRef"
+		class="content details comments-container"
+	>
+		<h2
+			v-if="canWrite || comments.length > 0"
+			class="comments-heading task-section-title"
+			:class="{'d-print-none': comments.length === 0}"
+		>
+			<span>
+				<span class="icon is-grey">
+					<Icon :icon="['far', 'comments']" />
+				</span>
+				{{ $t('task.comment.title') }}
+			</span>
+			<BaseButton
+				v-if="comments.length > 0"
+				class="comment-sort-button"
+				@click="toggleSortOrder"
+			>
+				<Icon :icon="commentSortOrder === 'asc' ? 'arrow-down-short-wide' : 'arrow-up-short-wide'" />
+				{{ commentSortOrder === 'asc' ? $t('task.comment.sortOldestFirst') : $t('task.comment.sortNewestFirst') }}
+			</BaseButton>
+		</h2>
+		<div class="comments">
+			<span
+				v-if="taskCommentService.loading && saving === null && !creating"
+				class="is-flex is-align-items-center mbs-4 mbe-4 mis-2"
+			>
+				<span class="loader is-inline-block mie-2" />
+				{{ $t('task.comment.loading') }}
+			</span>
+			<div
+				v-for="c in comments"
+				:id="`comment-${c.id}`"
+				:key="c.id"
+				class="media comment"
+			>
+				<figure class="media-left is-hidden-mobile">
+					<UserAvatar
+						:user="c.author"
+						:size="48"
+						class="image is-avatar"
+					/>
+					<figcaption class="is-sr-only">
+						{{ $t('misc.avatarOfUser', {user: getDisplayName(c.author)}) }}
+					</figcaption>
+				</figure>
+				<div class="media-content">
+					<div class="comment-info">
+						<UserAvatar
+							:user="c.author"
+							:size="20"
+							class="image is-avatar d-print-none"
+						/>
+						<strong>{{ getDisplayName(c.author) }}</strong>
+						<span
+							v-tooltip="formatDateLong(c.created)"
+							class="has-text-grey"
+						>
+							{{ formatDisplayDate(c.created) }}
+						</span>
+						<span
+							v-if="+new Date(c.created) !== +new Date(c.updated)"
+							v-tooltip="formatDateLong(c.updated)"
+						>
+							· {{ $t('task.comment.edited', {date: formatDisplayDate(c.updated)}) }}
+						</span>
+						<a
+							v-tooltip="$t('task.comment.permalink')"
+							:href="`#comment-${c.id}`"
+							class="comment-permalink"
+							:title="$t('task.comment.permalink')"
+							@click.prevent.stop="copy(getCommentUrl(`${c.id}`))"
+						>
+							<span class="is-sr-only">{{ $t('task.comment.permalink') }}</span>
+							<Icon icon="link" />
+						</a>
+						<CustomTransition name="fade">
+							<span
+								v-if="
+									taskCommentService.loading &&
+										saving === c.id
+								"
+								class="is-inline-flex"
+							>
+								<span class="loader is-inline-block mie-2" />
+								{{ $t('misc.saving') }}
+							</span>
+							<span
+								v-else-if="
+									!taskCommentService.loading &&
+										saved === c.id
+								"
+								class="has-text-success"
+							>
+								{{ $t('misc.saved') }}
+							</span>
+						</CustomTransition>
+					</div>
+					<Editor
+						v-model="c.comment"
+						:is-edit-enabled="canWrite && c.author.id === currentUserId"
+						:upload-callback="attachmentUpload"
+						:upload-enabled="true"
+						:bottom-actions="actions[c.id]"
+						:show-save="true"
+						:enable-discard-shortcut="true"
+						:enable-mentions="true"
+						:project-id="projectId"
+						initial-mode="preview"
+						@update:modelValue="
+							() => {
+								toggleEdit(c)
+								editCommentWithDelay()
+							}
+						"
+						@save="() => {
+							toggleEdit(c)
+							editComment()
+						}"
+					/>
+					<Reactions 
+						v-model="c.reactions"
+						class="mbs-2 d-print-none"
+						entity-kind="comments"
+						:entity-id="c.id"
+						:disabled="!canWrite"
+					/>
+				</div>
+			</div>
+
+			<PaginationEmit
+				v-if="taskCommentService.totalPages > 1"
+				:total-pages="taskCommentService.totalPages"
+				:current-page="currentPage"
+				@pageChanged="changePage"
+			/>
+
+			<div
+				v-if="canWrite"
+				class="media comment d-print-none"
+				:class="{'new-comment-top': commentSortOrder === 'desc'}"
+			>
+				<figure class="media-left is-hidden-mobile">
+					<UserAvatar
+						:user="authStore.info"
+						:size="48"
+						class="image is-avatar"
+					/>
+					<figcaption class="is-sr-only">
+						{{ $t('misc.avatarOfUser', {user: getDisplayName(authStore.info)}) }}
+					</figcaption>
+				</figure>
+				<div class="media-content">
+					<div class="form">
+						<CustomTransition name="fade">
+							<span
+								v-if="taskCommentService.loading && creating"
+								class="is-inline-flex"
+							>
+								<span class="loader is-inline-block mie-2" />
+								{{ $t('task.comment.creating') }}
+							</span>
+						</CustomTransition>
+						<div class="field">
+							<Editor
+								v-if="editorActive"
+								ref="newCommentEditor"
+								v-model="newCommentText"
+								:class="{
+									'is-loading':
+										taskCommentService.loading &&
+										!isCommentEdit,
+								}"
+								:upload-callback="attachmentUpload"
+								:placeholder="$t('task.comment.placeholder')"
+								:enable-mentions="true"
+								:project-id="projectId"
+								:storage-key="commentStorageKey"
+								@save="addComment()"
+							/>
+						</div>
+						<div class="field">
+							<XButton
+								:loading="taskCommentService.loading && !isCommentEdit"
+								:disabled="newCommentText === ''"
+								@click="addComment()"
+							>
+								{{ $t('task.comment.comment') }}
+							</XButton>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+
+
+		<Modal
+			:enabled="showDeleteModal"
+			@close="showDeleteModal = false"
+			@submit="() => deleteComment(commentToDelete)"
+		>
+			<template #header>
+				<span>{{ $t('task.comment.delete') }}</span>
+			</template>
+
+			<template #text>
+				<p>
+					{{ $t('task.comment.deleteText1') }}<br>
+					<strong class="has-text-white">{{ $t('misc.cannotBeUndone') }}</strong>
+				</p>
+			</template>
+		</Modal>
+	</div>
+</template>
+
+<script setup lang="ts">
+import {ref, reactive, computed, nextTick, provide, shallowReactive, watch} from 'vue'
+import {useI18n} from 'vue-i18n'
+
+import BaseButton from '@/components/base/BaseButton.vue'
+import CustomTransition from '@/components/misc/CustomTransition.vue'
+import Editor from '@/components/input/AsyncEditor'
+import PaginationEmit from '@/components/misc/PaginationEmit.vue'
+import UserAvatar from '@/components/misc/UserAvatar.vue'
+
+import TaskCommentService from '@/services/taskComment'
+import TaskCommentModel from '@/models/taskComment'
+
+import type {ITaskComment} from '@/modelTypes/ITaskComment'
+import type {ITask} from '@/modelTypes/ITask'
+
+import {uploadFile, uploadFilesForEditor} from '@/helpers/attachments'
+import {success} from '@/message'
+import {formatDateLong, formatDisplayDate} from '@/helpers/time/formatDate'
+import {clearEditorDraft} from '@/helpers/editorDraftStorage'
+import {getDisplayName} from '@/models/user'
+import {useConfigStore} from '@/stores/config'
+import {useAuthStore} from '@/stores/auth'
+import Reactions from '@/components/input/Reactions.vue'
+import {useCopyToClipboard} from '@/composables/useCopyToClipboard'
+import {commentReplyContextKey, scrollAndHighlightComment} from '@/components/tasks/partials/commentReplyContext'
+
+const props = withDefaults(defineProps<{
+	taskId: number,
+	projectId: number,
+	canWrite?: boolean
+	initialComments: ITaskComment[]
+}>(), {
+	canWrite: true,
+})
+
+const copy = useCopyToClipboard()
+
+const {t} = useI18n({useScope: 'global'})
+const configStore = useConfigStore()
+const authStore = useAuthStore()
+
+const localSortOrder = ref<'asc' | 'desc' | null>(null)
+const commentSortOrder = computed(() => localSortOrder.value ?? authStore.settings.frontendSettings.commentSortOrder ?? 'asc')
+
+const comments = ref<ITaskComment[]>([])
+
+const showDeleteModal = ref(false)
+const commentToDelete = reactive(new TaskCommentModel())
+
+const isCommentEdit = ref(false)
+const commentEdit = reactive(new TaskCommentModel())
+
+const newCommentText = ref('')
+
+const saved = ref<ITask['id'] | null>(null)
+const saving = ref<ITask['id'] | null>(null)
+
+const currentUserId = computed(() => authStore.info.id)
+const enabled = computed(() => configStore.taskCommentsEnabled)
+const actions = computed(() => {
+	if (!props.canWrite) {
+		return {}
+	}
+	return Object.fromEntries(comments.value.map((comment) => {
+		const list: {action: () => void, title: string}[] = [{
+			action: () => startReplyTo(comment),
+			title: t('task.comment.reply'),
+		}]
+		if (comment.author.id === currentUserId.value) {
+			list.push({
+				action: () => toggleDelete(comment.id),
+				title: t('misc.delete'),
+			})
+		}
+		return [comment.id, list]
+	}))
+})
+
+const frontendUrl = computed(() => configStore.frontendUrl)
+const commentStorageKey = computed(() => `task-comment-${props.taskId}`)
+
+const currentPage = ref(1)
+
+const commentsRef = ref<HTMLElement | null>(null)
+const newCommentEditor = ref<{setReplyContent: (html: string) => Promise<void>} | null>(null)
+
+provide(commentReplyContextKey, {
+	findComment: (id: number) => comments.value.find(c => c.id === id),
+	scrollToComment: scrollAndHighlightComment,
+})
+
+// Strip <mention-user> elements from a reply quote so reposting the parent
+// body doesn't trigger fresh notifications for users mentioned in the
+// original. The inner text is kept so the quote still reads correctly.
+function stripMentionsForQuote(html: string): string {
+	if (!html) {
+		return ''
+	}
+	const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html')
+	doc.querySelectorAll('mention-user').forEach((el) => {
+		const label = (el.getAttribute('data-label') ?? el.textContent ?? '').trim()
+		el.replaceWith(label ? `@${label.replace(/^@+/, '')}` : '')
+	})
+	return doc.body.firstElementChild?.innerHTML ?? ''
+}
+
+async function startReplyTo(parent: ITaskComment) {
+	const body = stripMentionsForQuote(parent.comment ?? '')
+	const draft = `<blockquote data-comment-id="${parent.id}">${body}</blockquote><p></p>`
+	if (!editorActive.value) {
+		editorActive.value = true
+	}
+	// Editor mounts asynchronously through defineAsyncComponent; wait until
+	// the ref is populated before pushing content in. Bail with a warning
+	// rather than fall back to `newCommentText = draft` — the modelValue
+	// watcher in TipTap.vue would land the editor in preview mode, leaving
+	// the user unable to type without clicking the editor first.
+	const editor = await waitForEditorRef()
+	if (!editor) {
+		console.warn('Reply editor did not mount in time; aborting reply prefill.')
+		return
+	}
+	await editor.setReplyContent(draft)
+}
+
+async function waitForEditorRef() {
+	const start = performance.now()
+	while (!newCommentEditor.value && performance.now() - start < 2000) {
+
+		await nextTick()
+	}
+	return newCommentEditor.value
+}
+
+
+function attachmentUpload(files: File[] | FileList): Promise<string[]> {
+	return uploadFilesForEditor(
+		(file, onSuccess) => uploadFile(props.taskId, file, onSuccess),
+		files,
+	)
+}
+
+const taskCommentService = shallowReactive(new TaskCommentService())
+
+async function loadComments(taskId: ITask['id']) {
+	if (!enabled.value) {
+		return
+	}
+
+	if (currentPage.value === 1) {
+		taskCommentService.totalPages = 0
+		taskCommentService.resultCount = 0
+	}
+
+	commentEdit.taskId = taskId
+	commentToDelete.taskId = taskId
+
+	if (commentSortOrder.value === 'asc' && typeof props.initialComments !== 'undefined' && currentPage.value === 1) {
+		if (props.initialComments.length < configStore.maxItemsPerPage) {
+			comments.value = props.initialComments
+			return
+		}
+	}
+
+	comments.value = await taskCommentService.getAll({taskId}, {order_by: commentSortOrder.value}, currentPage.value)
+}
+
+async function changePage(page: number) {
+	commentsRef.value?.scrollIntoView({ behavior: 'smooth', block: 'start', inline: 'nearest' })
+	currentPage.value = page
+	await loadComments(props.taskId)
+}
+
+async function toggleSortOrder() {
+	const newOrder = commentSortOrder.value === 'asc' ? 'desc' : 'asc'
+	if (!authStore.isLinkShareAuth) {
+		await authStore.saveUserSettings({
+			settings: {
+				...authStore.settings,
+				frontendSettings: {
+					...authStore.settings.frontendSettings,
+					commentSortOrder: newOrder,
+					quickAddDefaultReminders: [...(authStore.settings.frontendSettings.quickAddDefaultReminders ?? [])],
+				},
+			},
+			showMessage: false,
+		})
+	} else {
+		localSortOrder.value = newOrder
+	}
+	if (taskCommentService.totalPages > 1) {
+		currentPage.value = 1
+		await loadComments(props.taskId)
+	} else {
+		comments.value.reverse()
+	}
+}
+
+watch(
+	() => [props.taskId, props.initialComments],
+	() => {
+		currentPage.value = 1 // Reset to first page when task changes
+		loadComments(props.taskId)
+	},
+	{immediate: true},
+)
+
+const editorActive = ref(true)
+const creating = ref(false)
+
+async function addComment() {
+	if (newCommentText.value === '') {
+		return
+	}
+
+	creating.value = true
+
+	try {
+		const newComment = new TaskCommentModel()
+		newComment.taskId = props.taskId
+		newComment.comment = newCommentText.value
+		const comment = await taskCommentService.create(newComment)
+
+		if (commentSortOrder.value === 'desc' && currentPage.value > 1) {
+			currentPage.value = 1
+			await loadComments(props.taskId)
+		} else if (commentSortOrder.value === 'desc') {
+			comments.value.unshift(comment)
+		} else {
+			comments.value.push(comment)
+		}
+		newCommentText.value = ''
+
+		// Ensure draft is cleared from localStorage
+		clearEditorDraft(commentStorageKey.value)
+
+		if (commentSortOrder.value === 'desc') {
+			commentsRef.value?.scrollIntoView({behavior: 'smooth', block: 'start', inline: 'nearest'})
+		}
+
+		success({message: t('task.comment.addedSuccess')})
+	} finally {
+		creating.value = false
+	}
+}
+
+function toggleEdit(comment: ITaskComment) {
+	isCommentEdit.value = !isCommentEdit.value
+	Object.assign(commentEdit, comment)
+}
+
+function toggleDelete(commentId: ITaskComment['id']) {
+	showDeleteModal.value = !showDeleteModal.value
+	commentToDelete.id = commentId
+}
+
+const changeTimeout = ref<ReturnType<typeof setTimeout> | null>(null)
+
+async function editCommentWithDelay() {
+	if (changeTimeout.value !== null) {
+		clearTimeout(changeTimeout.value)
+	}
+
+	changeTimeout.value = setTimeout(async () => {
+		await editComment()
+	}, 5000)
+}
+
+async function editComment() {
+	if (commentEdit.comment === '') {
+		return
+	}
+
+	if (changeTimeout.value !== null) {
+		clearTimeout(changeTimeout.value)
+	}
+
+	saving.value = commentEdit.id
+
+	commentEdit.taskId = props.taskId
+	try {
+		const comment = await taskCommentService.update(commentEdit)
+		for (let c = 0; c < comments.value.length; c++) {
+			if (comments.value[c].id === commentEdit.id) {
+				comments.value[c] = comment
+			}
+		}
+		saved.value = commentEdit.id
+		setTimeout(() => {
+			saved.value = null
+		}, 2000)
+	} finally {
+		isCommentEdit.value = false
+		saving.value = null
+	}
+}
+
+async function deleteComment(commentToDelete: ITaskComment) {
+	try {
+		await taskCommentService.delete(commentToDelete)
+		const index = comments.value.findIndex(({id}) => id === commentToDelete.id)
+		comments.value.splice(index, 1)
+		success({message: t('task.comment.deleteSuccess')})
+	} finally {
+		showDeleteModal.value = false
+	}
+}
+
+function getCommentUrl(commentId: string) {
+	const baseUrl = frontendUrl.value.endsWith('/') ? frontendUrl.value.slice(0, -1) : frontendUrl.value
+	const url = new URL(location.pathname + location.search, baseUrl)
+	url.hash = `comment-${commentId}`
+	return url.toString()
+}
+</script>
+
+<style lang="scss" scoped>
+.media {
+	align-items: flex-start;
+	display: flex;
+	text-align: inherit;
+	padding-block-start: .5rem;
+
+	& + .media {
+		margin-block-start: .5rem;
+	}
+}
+
+.media-left {
+	flex-basis: auto;
+	flex-grow: 0;
+	flex-shrink: 0;
+	margin: 0 .5rem !important;
+}
+
+.comment-info {
+	display: flex;
+	align-items: center;
+	gap: .5rem;
+
+	img {
+		@media screen and (max-width: $tablet) {
+			display: block;
+			inline-size: 20px;
+			block-size: 20px;
+			padding-inline-end: 0;
+			margin-inline-end: .5rem;
+		}
+
+		@media screen and (min-width: $tablet) {
+			display: none;
+		}
+	}
+
+
+	span,
+	.comment-permalink {
+		font-size: .75rem;
+		line-height: 1;
+	}
+
+	.comment-permalink {
+		font-size: 1rem;
+		border: 1px solid transparent;
+		padding: 0.25rem;
+		border-radius: 1rem;
+		color: var(--grey, hsl(0, 0%, 48%));
+	}
+	.comment-permalink:hover {
+		color: var(--grey-dark, hsl(0, 0%, 29%));
+		border-color: var(--grey-dark, hsl(0, 0%, 29%));
+	}
+}
+
+.image.is-avatar {
+	border-radius: 100%;
+}
+
+.media-content {
+	flex-basis: auto;
+	flex-grow: 1;
+	flex-shrink: 1;
+	text-align: inherit;
+	inline-size: calc(100% - 48px - 2rem);
+}
+
+.comments-heading {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.comment-sort-button {
+	font-size: .75rem;
+	font-weight: normal;
+	color: var(--grey-500);
+	display: inline-flex;
+	align-items: center;
+	gap: .25rem;
+
+	&:hover {
+		color: var(--grey-700);
+	}
+}
+
+.comments {
+	display: flex;
+	flex-direction: column;
+}
+
+.new-comment-top {
+	order: -1;
+}
+
+.comments-container {
+	scroll-margin-block-start: 4rem;
+}
+
+.media.comment {
+	scroll-margin-block-start: 4rem;
+	transition: background-color .3s ease-out;
+	border-radius: $radius;
+}
+
+.media.comment.comment-highlight {
+	background-color: hsla(var(--primary-hsl), 0.18);
+	transition: background-color .15s ease-in;
+}
+</style>

@@ -1,0 +1,2347 @@
+// Vikunja is a to-do list application to facilitate your life.
+// Copyright 2018-present Vikunja and contributors. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+//go:build mage
+
+package main
+
+import (
+	"bufio"
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"math"
+	"net"
+	"net/http"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"sort"
+	"strconv"
+	"strings"
+	"syscall"
+	"time"
+
+	apiv2 "code.vikunja.io/api/pkg/routes/api/v2"
+
+	"github.com/iancoleman/strcase"
+	"github.com/magefile/mage/mg"
+)
+
+const (
+	PACKAGE = `code.vikunja.io/api`
+	DIST    = `dist`
+)
+
+var (
+	Executable    = "vikunja"
+	Ldflags       = ""
+	Tags          = ""
+	VersionNumber = "dev"
+	Version       = "unstable" // This holds the built version, unstable by default, when building from a tag or release branch, their name
+	BinLocation   = ""
+	PkgVersion    = "unstable"
+
+	// Aliases are mage aliases of targets
+	Aliases = map[string]any{
+		"build":                    Build.Build,
+		"check:frontend-client":    Check.FrontendClient,
+		"check:got-swag":           Check.GotSwag,
+		"dev:make-migration":       Dev.MakeMigration,
+		"dev:make-event":           Dev.MakeEvent,
+		"dev:make-listener":        Dev.MakeListener,
+		"dev:make-notification":    Dev.MakeNotification,
+		"dev:prepare-worktree":     Dev.PrepareWorktree,
+		"dev:tag-release":          Dev.TagRelease,
+		"test:e2e":                 Test.E2E,
+		"test:e2e-api":             Test.E2EApi,
+		"plugins:build":            Plugins.Build,
+		"lint":                     Check.Golangci,
+		"lint:fix":                 Check.GolangciFix,
+		"generate:config-yaml":     Generate.ConfigYAML,
+		"generate:frontend-client": Generate.FrontendClient,
+		"generate:swagger-docs":    Generate.SwaggerDocs,
+		"generate:yaegi-symbols":   Generate.YaegiSymbols,
+		"check:yaegi-symbols":      Check.YaegiSymbols,
+	}
+)
+
+func goDetectVerboseFlag() string {
+	return fmt.Sprintf("-v=%t", mg.Verbose())
+}
+
+func runGitCommandWithOutput(ctx context.Context, arg ...string) (output []byte, err error) {
+	cmd := exec.CommandContext(ctx, "git", arg...)
+	output, err = cmd.Output()
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			return nil, fmt.Errorf("error running command: %s, %w", string(ee.Stderr), err)
+		}
+		return nil, fmt.Errorf("error running command: %w", err)
+	}
+
+	return output, nil
+}
+
+func getRawVersionString(ctx context.Context) (version string, err error) {
+	version, err = getRawVersionNumber(ctx)
+	if err != nil {
+		return
+	}
+
+	if version == "main" {
+		version = "unstable"
+	}
+
+	if version != "" && version != "unstable" {
+		return
+	}
+
+	return
+}
+
+func getRawVersionNumber(ctx context.Context) (version string, err error) {
+	versionEnv := os.Getenv("RELEASE_VERSION")
+	if versionEnv != "" {
+		return versionEnv, nil
+	}
+
+	if os.Getenv("DRONE_TAG") != "" {
+		return os.Getenv("DRONE_TAG"), nil
+	}
+
+	if os.Getenv("DRONE_BRANCH") != "" {
+		return strings.Replace(os.Getenv("DRONE_BRANCH"), "release/v", "", 1), nil
+	}
+
+	versionBytes, err := runGitCommandWithOutput(ctx, "describe", "--tags", "--always", "--abbrev=10")
+	return string(versionBytes), err
+}
+
+func setVersion(ctx context.Context) error {
+	versionNumber, err := getRawVersionNumber(ctx)
+	if err != nil {
+		return err
+	}
+	VersionNumber = strings.Trim(versionNumber, "\n")
+	VersionNumber = strings.Replace(VersionNumber, "-g", "-", 1)
+
+	version, err := getRawVersionString(ctx)
+	if err != nil {
+		return fmt.Errorf("error getting version: %w", err)
+	}
+	Version = version
+	return nil
+}
+
+func setBinLocation() {
+	if os.Getenv("DRONE_WORKSPACE") != "" {
+		BinLocation = DIST + `/binaries/` + Executable + `-` + Version + `-linux-amd64`
+	} else {
+		BinLocation = Executable
+	}
+}
+
+func setPkgVersion() {
+	if Version == "unstable" {
+		PkgVersion = VersionNumber
+	}
+}
+
+func setExecutable() {
+	if runtime.GOOS == "windows" {
+		Executable += ".exe"
+	}
+}
+
+// Some variables can always get initialized, so we do just that.
+func init() {
+	setExecutable()
+}
+
+// Some variables have external dependencies (like git) which may not always be available.
+func initVars(ctx context.Context) error {
+	// Always include osusergo to use pure Go os/user implementation instead of CGO.
+	// This prevents SIGFPE crashes when running under systemd without HOME set,
+	// caused by glibc's getpwuid_r() failing in certain environments.
+	// See: https://github.com/go-vikunja/vikunja/issues/2170
+	Tags = "osusergo " + strings.ReplaceAll(os.Getenv("TAGS"), ",", " ")
+	if err := setVersion(ctx); err != nil {
+		return err
+	}
+	setBinLocation()
+	setPkgVersion()
+	Ldflags = `-X "` + PACKAGE + `/pkg/version.Version=` + VersionNumber + `" -X "main.Tags=` + Tags + `"`
+	return nil
+}
+
+func runAndStreamOutput(ctx context.Context, cmd string, args ...string) error {
+	c := exec.CommandContext(ctx, cmd, args...)
+
+	c.Env = os.Environ()
+	c.Stdout = os.Stdout
+	c.Stderr = os.Stderr
+
+	fmt.Printf("%s\n\n", c.String())
+	return c.Run()
+}
+
+// Will check if the tool exists and if not install it from the provided import path
+// If any errors occur, it will exit with a status code of 1.
+func checkAndInstallGoTool(ctx context.Context, tool, importPath string) error {
+	if err := exec.CommandContext(ctx, tool).Run(); err != nil && strings.Contains(err.Error(), "executable file not found") {
+		fmt.Printf("%s not installed, installing %s...\n", tool, importPath)
+		if err := exec.CommandContext(ctx, "go", "install", goDetectVerboseFlag(), importPath).Run(); err != nil { //nolint:gosec // Every caller to checkAndInstallGoTool is hard-coded at time of writing, so no injection possible.
+			return fmt.Errorf("error installing %s: %w", tool, err)
+		}
+		fmt.Println("Installed.")
+	}
+	return nil
+}
+
+// Calculates a hash of a file
+func calculateSha256FileHash(path string) (hash string, err error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf("%x", h.Sum(nil)), nil
+}
+
+// Copy the src file to dst. Any existing file will be overwritten and will not
+// copy file attributes.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return err
+	}
+
+	si, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+
+	if err := os.Chmod(dst, si.Mode()); err != nil {
+		return err
+	}
+
+	return out.Close()
+}
+
+func appendToFile(filename, content string) error {
+	f, err := os.OpenFile(filename, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	_, err = f.WriteString(content)
+	return err
+}
+
+const InfoColor = "\033[1;32m%s\033[0m"
+
+func printSuccess(text string, args ...any) {
+	text = fmt.Sprintf(text, args...)
+	fmt.Printf(InfoColor+"\n", text)
+}
+
+// getE2EPort returns the port from the given env var, or a random available port.
+func getE2EPort(ctx context.Context, envVar string) (int, error) {
+	if v := os.Getenv(envVar); v != "" {
+		return strconv.Atoi(v)
+	}
+	return getRandomPort(ctx)
+}
+
+// getRandomPort finds a random available TCP port.
+func getRandomPort(ctx context.Context) (int, error) {
+	l, err := (&net.ListenConfig{}).Listen(ctx, "tcp", "127.0.0.1:0")
+	if err != nil {
+		return 0, err
+	}
+	defer l.Close()
+	return l.Addr().(*net.TCPAddr).Port, nil
+}
+
+// setProcessGroup configures a command to run in its own process group,
+// so that all child processes can be killed together.
+func setProcessGroup(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+}
+
+// killProcessGroup sends a signal to the entire process group of the given command.
+func killProcessGroup(cmd *exec.Cmd) error {
+	if cmd.Process == nil {
+		return nil
+	}
+	if pgid, err := syscall.Getpgid(cmd.Process.Pid); err == nil { // use best-effort to kill full process group
+		err = syscall.Kill(-pgid, syscall.SIGTERM)
+		if err != nil {
+			return err
+		}
+	}
+	return cmd.Wait()
+}
+
+// waitForHTTP polls a URL until it returns a 200 status or the timeout expires.
+func waitForHTTP(ctx context.Context, url string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	client := &http.Client{Timeout: 2 * time.Second}
+	for time.Now().Before(deadline) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := client.Do(req)
+		if err == nil {
+			resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return nil
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+	return fmt.Errorf("timed out waiting for %s after %s", url, timeout)
+}
+
+func ensureFrontendDistExists() error {
+	return ensureFrontendDistExistsIn(".")
+}
+
+// frontend/embed.go embeds dist/ with //go:embed all:dist, so every go build and
+// go test fails hard when that directory does not exist. A placeholder index.html
+// keeps them working in a worktree that never ran a frontend build.
+func ensureFrontendDistExistsIn(root string) error {
+	distPath := filepath.Join(root, "frontend", "dist")
+	if _, err := os.Stat(distPath); os.IsNotExist(err) {
+		if err := os.MkdirAll(distPath, 0o755); err != nil {
+			return fmt.Errorf("error creating %s: %w", distPath, err)
+		}
+	}
+
+	indexFile := filepath.Join(distPath, "index.html")
+	if _, err := os.Stat(indexFile); os.IsNotExist(err) {
+		f, err := os.Create(indexFile)
+		if err != nil {
+			return fmt.Errorf("error creating %s: %w", indexFile, err)
+		}
+		f.Close()
+	}
+	return nil
+}
+
+// Fmt formats the code using go fmt
+func Fmt(ctx context.Context) error {
+	mg.Deps(initVars, ensureFrontendDistExists)
+	out, err := exec.CommandContext(ctx, "git", "ls-files", "--cached", "--others", "--exclude-standard", "*.go").Output()
+	if err != nil {
+		return fmt.Errorf("failed to list go files from git: %w", err)
+	}
+	goFiles := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(goFiles) == 0 || (len(goFiles) == 1 && goFiles[0] == "") {
+		return nil
+	}
+	args := append([]string{"-s", "-w"}, goFiles...)
+	return runAndStreamOutput(ctx, "gofmt", args...)
+}
+
+type Test mg.Namespace
+
+const webtestsPackage = "./pkg/webtests"
+
+// goTestPackagesExcept expands ./... minus the given package patterns.
+func goTestPackagesExcept(ctx context.Context, exclude ...string) ([]string, error) {
+	out, err := exec.CommandContext(ctx, "go", "list", "./...").Output()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list go packages: %w", err)
+	}
+
+	excluded := make(map[string]bool, len(exclude))
+	for _, pattern := range exclude {
+		excluded[strings.TrimPrefix(pattern, "./")] = true
+	}
+
+	var packages []string
+	for _, pkg := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		if pkg == "" || excluded[strings.TrimPrefix(pkg, PACKAGE+"/")] {
+			continue
+		}
+		packages = append(packages, pkg)
+	}
+	return packages, nil
+}
+
+// Feature runs the feature tests
+func (Test) Feature(ctx context.Context) error {
+	mg.Deps(initVars, ensureFrontendDistExists)
+	// We run everything sequentially and not in parallel to prevent issues with real test databases
+	return runAndStreamOutput(ctx, "go", "test", goDetectVerboseFlag(), "-p", "1", "-coverprofile", "cover.out", "-timeout", "45m", "-short", "./...")
+}
+
+// Coverage runs the tests and builds the coverage html file from coverage output
+func (Test) Coverage(ctx context.Context) error {
+	mg.Deps(initVars)
+	mg.Deps(Test.Feature)
+	return runAndStreamOutput(ctx, "go", "tool", "cover", "-html=cover.out", "-o", "cover.html")
+}
+
+// Web runs the web tests
+func (Test) Web(ctx context.Context) error {
+	mg.Deps(initVars, ensureFrontendDistExists)
+	// We run everything sequentially and not in parallel to prevent issues with real test databases
+	args := []string{"test", goDetectVerboseFlag(), "-p", "1", "-timeout", "45m", "./pkg/webtests"}
+	return runAndStreamOutput(ctx, "go", args...)
+}
+
+// Filter runs every test matching the given `go test -run` filter.
+//
+// Most packages run with -short, but pkg/webtests is run in a second pass without
+// it: its TestMain skips the entire package under -short, so a filter naming a web
+// test would otherwise report "ok" without having run anything. The second pass is
+// a no-op when the filter matches nothing there.
+func (Test) Filter(ctx context.Context, filter string) error {
+	mg.Deps(initVars, ensureFrontendDistExists)
+
+	packages, err := goTestPackagesExcept(ctx, webtestsPackage)
+	if err != nil {
+		return err
+	}
+
+	// We run everything sequentially and not in parallel to prevent issues with real test databases
+	args := append([]string{"test", goDetectVerboseFlag(), "-p", "1", "-timeout", "45m", "-run", filter, "-short"}, packages...)
+	if err := runAndStreamOutput(ctx, "go", args...); err != nil {
+		return err
+	}
+
+	return runAndStreamOutput(ctx, "go", "test", goDetectVerboseFlag(), "-p", "1", "-timeout", "45m", "-run", filter, webtestsPackage)
+}
+
+func (Test) All() {
+	mg.Deps(initVars, ensureFrontendDistExists)
+	mg.Deps(Test.Feature, Test.Web, Test.Caldav, Test.E2EApi)
+}
+
+// Caldav runs the CalDAV protocol compliance tests in pkg/caldavtests.
+// These tests exercise the full HTTP router with WebDAV/CalDAV requests.
+func (Test) Caldav(ctx context.Context) error {
+	mg.Deps(initVars, ensureFrontendDistExists)
+	return runAndStreamOutput(ctx, "go", "test", goDetectVerboseFlag(), "-p", "1", "-timeout", "45m", "./pkg/caldavtests")
+}
+
+// E2EApi runs the end-to-end API tests in pkg/e2etests.
+// These tests use the real event system (not events.Fake()) to verify
+// the full async pipeline: web handler → DB → event dispatch → watermill → listener.
+func (Test) E2EApi(ctx context.Context) error {
+	mg.Deps(initVars, ensureFrontendDistExists)
+	return runAndStreamOutput(ctx, "go", "test", goDetectVerboseFlag(), "-p", "1", "-timeout", "45m", "./pkg/e2etests")
+}
+
+// E2E builds the API, starts it with an in-memory database and the frontend dev server,
+// runs the Playwright e2e tests against them, then tears everything down.
+// This does not touch your local database.
+//
+// Any arguments are passed through to Playwright. Examples:
+//
+//	mage test:e2e ""                                     # run all tests
+//	mage test:e2e "tests/e2e/misc/menu.spec.ts"         # run a specific test file
+//	mage test:e2e "--grep menu"                          # filter by test name
+//	mage test:e2e "--headed"                             # run in headed browser mode
+//	mage test:e2e "--headed tests/e2e/misc/menu.spec.ts" # combine flags
+//
+// Environment variable overrides:
+//   - VIKUNJA_E2E_API_PORT: API port (default: random)
+//   - VIKUNJA_E2E_FRONTEND_PORT: Frontend port (default: random)
+//   - VIKUNJA_E2E_TESTING_TOKEN: Testing token for seed endpoints (default: random)
+//   - VIKUNJA_E2E_SKIP_BUILD: Set to "true" to skip rebuilding the API binary (default: false)
+func (Test) E2E(ctx context.Context, args string) error {
+	mg.Deps(initVars)
+
+	// Determine ports
+	apiPort, err := getE2EPort(ctx, "VIKUNJA_E2E_API_PORT")
+	if err != nil {
+		return fmt.Errorf("could not get API port: %w", err)
+	}
+	frontendPort, err := getE2EPort(ctx, "VIKUNJA_E2E_FRONTEND_PORT")
+	if err != nil {
+		return fmt.Errorf("could not get frontend port: %w", err)
+	}
+
+	// Generate a random testing token
+	testingToken := os.Getenv("VIKUNJA_E2E_TESTING_TOKEN")
+	if testingToken == "" {
+		testingToken = fmt.Sprintf("e2e-test-token-%d", time.Now().UnixNano())
+	}
+
+	fmt.Printf("E2E test configuration:\n")
+	fmt.Printf("  API port:      %d\n", apiPort)
+	fmt.Printf("  Frontend port: %d\n", frontendPort)
+	fmt.Printf("  Testing token: %s\n", testingToken)
+
+	// Build the API binary (unless skipped)
+	if os.Getenv("VIKUNJA_E2E_SKIP_BUILD") != "true" {
+		fmt.Println("\n--- Building API binary ---")
+		if err := (Build{}).Build(ctx); err != nil {
+			return fmt.Errorf("failed to build API: %w", err)
+		}
+	}
+
+	// Create temp directory for file uploads and rootpath
+	tmpDir, err := os.MkdirTemp("", "vikunja-e2e-*")
+	if err != nil {
+		return fmt.Errorf("failed to create temp dir: %w", err)
+	}
+	defer func() {
+		fmt.Println("\n--- Cleaning up temp directory ---")
+		os.RemoveAll(tmpDir)
+	}()
+
+	if err := os.MkdirAll(filepath.Join(tmpDir, "files"), 0o755); err != nil {
+		return fmt.Errorf("failed to create files dir: %w", err)
+	}
+
+	// Start the API server — all config via env vars, no config file
+	// Uses in-memory SQLite (no DB file on disk)
+	fmt.Println("\n--- Starting API server ---")
+	apiCmd := exec.CommandContext(ctx, "./vikunja", "web")
+	apiCmd.Env = append(os.Environ(),
+		fmt.Sprintf("VIKUNJA_SERVICE_INTERFACE=:%d", apiPort),
+		fmt.Sprintf("VIKUNJA_SERVICE_PUBLICURL=http://127.0.0.1:%d/", apiPort),
+		fmt.Sprintf("VIKUNJA_SERVICE_TESTINGTOKEN=%s", testingToken),
+		fmt.Sprintf("VIKUNJA_SERVICE_ROOTPATH=%s", tmpDir),
+		"VIKUNJA_SERVICE_JWTSECRET=e2e-test-jwt-secret-do-not-use-in-production",
+		"VIKUNJA_DATABASE_TYPE=sqlite",
+		"VIKUNJA_DATABASE_PATH=memory",
+		fmt.Sprintf("VIKUNJA_FILES_BASEPATH=%s", filepath.Join(tmpDir, "files")),
+		"VIKUNJA_LOG_LEVEL=WARNING",
+		"VIKUNJA_MAILER_ENABLED=false",
+		"VIKUNJA_REDIS_ENABLED=false",
+		"VIKUNJA_RATELIMIT_NOAUTHLIMIT=1000",
+	)
+	apiCmd.Stdout = os.Stdout
+	apiCmd.Stderr = os.Stderr
+	setProcessGroup(apiCmd)
+	if err := apiCmd.Start(); err != nil {
+		return fmt.Errorf("failed to start API: %w", err)
+	}
+	defer func() {
+		fmt.Println("\n--- Stopping API server ---")
+		if err := killProcessGroup(apiCmd); err != nil {
+			fmt.Println("Failed to stop API server:", err)
+		}
+	}()
+
+	// Wait for API to be ready
+	apiBase := fmt.Sprintf("http://127.0.0.1:%d/api/v1", apiPort)
+	fmt.Printf("Waiting for API at %s ...\n", apiBase)
+	if err := waitForHTTP(ctx, apiBase+"/info", 30*time.Second); err != nil {
+		return fmt.Errorf("API failed to start: %w", err)
+	}
+	printSuccess("API is ready!")
+
+	// Build the frontend
+	fmt.Println("\n--- Building frontend ---")
+	buildFrontendCmd := exec.CommandContext(ctx, "pnpm", "build:dev")
+	buildFrontendCmd.Dir = "frontend"
+	buildFrontendCmd.Stdout = os.Stdout
+	buildFrontendCmd.Stderr = os.Stderr
+	if err := buildFrontendCmd.Run(); err != nil {
+		return fmt.Errorf("failed to build frontend: %w", err)
+	}
+	printSuccess("Frontend built!")
+
+	// Serve the built frontend with vite preview (static, no file watchers)
+	fmt.Println("\n--- Starting frontend preview server ---")
+	frontendCmd := exec.CommandContext(ctx, "pnpm", "preview:dev", "--port", strconv.Itoa(frontendPort)) //nolint:gosec // This mage task runs end to end tests with environment-based configuration, it must use the port environment variable to suit its current environment.
+	frontendCmd.Dir = "frontend"
+	frontendCmd.Stdout = os.Stdout
+	frontendCmd.Stderr = os.Stderr
+	setProcessGroup(frontendCmd)
+	if err := frontendCmd.Start(); err != nil {
+		return fmt.Errorf("failed to start frontend: %w", err)
+	}
+	defer func() {
+		fmt.Println("\n--- Stopping frontend preview server ---")
+		if err := killProcessGroup(frontendCmd); err != nil {
+			fmt.Println("Failed to stop API server:", err)
+		}
+	}()
+
+	// Wait for frontend to be ready
+	frontendBase := fmt.Sprintf("http://127.0.0.1:%d", frontendPort)
+	fmt.Printf("Waiting for frontend at %s ...\n", frontendBase)
+	if err := waitForHTTP(ctx, frontendBase, 60*time.Second); err != nil {
+		return fmt.Errorf("frontend failed to start: %w", err)
+	}
+	printSuccess("Frontend is ready!")
+
+	// Run Playwright tests
+	fmt.Println("\n--- Running Playwright e2e tests ---")
+	playwrightArgs := []string{"test:e2e"}
+	if strings.TrimSpace(args) != "" {
+		playwrightArgs = append(playwrightArgs, strings.Fields(args)...)
+	}
+	playwrightCmd := exec.CommandContext(ctx, "pnpm", playwrightArgs...)
+	playwrightCmd.Dir = "frontend"
+	playwrightCmd.Env = append(os.Environ(),
+		fmt.Sprintf("API_URL=%s/", apiBase),
+		fmt.Sprintf("BASE_URL=%s", frontendBase),
+		fmt.Sprintf("VIKUNJA_SERVICE_TESTINGTOKEN=%s", testingToken),
+		fmt.Sprintf("TEST_SECRET=%s", testingToken),
+	)
+	playwrightCmd.Stdout = os.Stdout
+	playwrightCmd.Stderr = os.Stderr
+
+	testErr := playwrightCmd.Run()
+
+	if testErr != nil {
+		return fmt.Errorf("e2e tests failed: %w", testErr)
+	}
+
+	printSuccess("All e2e tests passed!")
+	return nil
+}
+
+type Check mg.Namespace
+
+func (Check) FrontendClient(ctx context.Context) error {
+	if err := (Generate{}).FrontendClient(ctx); err != nil {
+		return err
+	}
+	firstHash, err := frontendClientDirectoryHash()
+	if err != nil {
+		return err
+	}
+
+	if err := (Generate{}).FrontendClient(ctx); err != nil {
+		return err
+	}
+	secondHash, err := frontendClientDirectoryHash()
+	if err != nil {
+		return err
+	}
+	if firstHash != secondHash {
+		return errors.New("frontend API client generation is not idempotent")
+	}
+
+	status, err := runGitCommandWithOutput(ctx, "status", "--porcelain", "--", "frontend/src/client/generated")
+	if err != nil {
+		return err
+	}
+	if len(bytes.TrimSpace(status)) > 0 {
+		return errors.New("frontend API client is not up to date: run 'mage generate:frontend-client' and commit the result")
+	}
+	return nil
+}
+
+func frontendClientDirectoryHash() (string, error) {
+	const root = "frontend/src/client/generated"
+	hash := sha256.New()
+	err := filepath.Walk(root, func(path string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			return nil
+		}
+		fileHash, err := calculateSha256FileHash(path)
+		if err != nil {
+			return err
+		}
+		relativePath, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		_, err = fmt.Fprintf(hash, "%s\x00%o\x00%s\n", relativePath, info.Mode().Perm(), fileHash)
+		return err
+	})
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%x", hash.Sum(nil)), nil
+}
+
+// GotSwag checks if the swagger docs need to be re-generated from the code annotations
+func (Check) GotSwag(ctx context.Context) error {
+	mg.Deps(initVars)
+	// The check is pretty cheaply done: We take the hash of the swagger.json file, generate the docs,
+	// hash the file again and compare the two hashes to see if anything changed. If that's the case,
+	// regenerating the docs is necessary.
+	// swag is not capable of just outputting the generated docs to stdout, therefore we need to do it this way.
+	// Another drawback of this is obviously it will only work once - we're not resetting the newly generated
+	// docs after the check. This behaviour is good enough for ci though.
+	oldHash, err := calculateSha256FileHash("./pkg/swagger/swagger.json")
+	if err != nil {
+		return fmt.Errorf("error getting old hash of the swagger docs: %w", err)
+	}
+
+	if generateErr := (Generate{}).SwaggerDocs(ctx); generateErr != nil {
+		return generateErr
+	}
+
+	newHash, err := calculateSha256FileHash("./pkg/swagger/swagger.json")
+	if err != nil {
+		return fmt.Errorf("error getting new hash of the swagger docs: %w", err)
+	}
+
+	if oldHash != newHash {
+		return fmt.Errorf("swagger docs are not up to date: run 'mage generate:swagger-docs' and commit the result")
+	}
+	return nil
+}
+
+// YaegiSymbols checks if the yaegi symbol tables in pkg/yaegi_symbols need to be re-generated
+func (Check) YaegiSymbols(ctx context.Context) error {
+	mg.Deps(initVars)
+
+	// Same hash-compare approach as GotSwag: regenerate in place and compare.
+	// The regenerated files are not reset afterwards, which is fine for ci.
+	oldHashes := make(map[string]string, len(yaegiSymbolPackages))
+	for _, p := range yaegiSymbolPackages {
+		hash, err := calculateSha256FileHash(filepath.Join(yaegiSymbolsDir, p.outFile))
+		if err != nil {
+			return fmt.Errorf("error getting old hash of %s: %w", p.outFile, err)
+		}
+		oldHashes[p.outFile] = hash
+	}
+
+	if err := (Generate{}).YaegiSymbols(ctx); err != nil {
+		return err
+	}
+
+	var stale []string
+	for _, p := range yaegiSymbolPackages {
+		hash, err := calculateSha256FileHash(filepath.Join(yaegiSymbolsDir, p.outFile))
+		if err != nil {
+			return fmt.Errorf("error getting new hash of %s: %w", p.outFile, err)
+		}
+		if hash != oldHashes[p.outFile] {
+			stale = append(stale, p.outFile)
+		}
+	}
+
+	if len(stale) > 0 {
+		return fmt.Errorf("yaegi symbols are not up to date (%s): run 'mage generate:yaegi-symbols' and commit the result", strings.Join(stale, ", "))
+	}
+	return nil
+}
+
+// Translations checks that all translation keys used in the code exist in
+// their respective English translation files, and conversely that no unused
+// keys exist in those files. Both the api (Go) and the frontend (Vue/TS) are
+// checked in one run so a single CI job can gate the whole repository.
+func (Check) Translations() error {
+	mg.Deps(initVars)
+
+	var errs []error
+	if err := checkAPITranslations(); err != nil {
+		errs = append(errs, err)
+	}
+	if err := checkFrontendTranslations(); err != nil {
+		errs = append(errs, err)
+	}
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+	return nil
+}
+
+func checkAPITranslations() error {
+	fmt.Println("Checking api translation keys...")
+
+	translationFile := "./pkg/i18n/lang/en.json"
+	translations, err := loadTranslations(translationFile)
+	if err != nil {
+		return fmt.Errorf("error loading api translations: %w", err)
+	}
+
+	fmt.Printf("Loaded %d translation keys from %s\n", len(translations), translationFile)
+
+	keys, literals, err := walkAPIForTranslationKeys(".")
+	if err != nil {
+		return fmt.Errorf("error walking api codebase: %w", err)
+	}
+
+	fmt.Printf("Found %d translation key references in the api codebase\n", len(keys))
+
+	// Some api keys are referenced indirectly – e.g. the time.since_* keys are
+	// stored as string literals in a struct slice in pkg/utils/humanize_duration.go
+	// and looked up via i18n.TP(lang, chunk.key, ...). Any literal that matches a
+	// known translation key is treated as a usage hint, so those keys aren't
+	// flagged as dead.
+	for lit := range literals {
+		if translations[lit] {
+			keys = append(keys, TranslationKey{Key: lit, FilePath: "<api literal hint>", Line: 0})
+		}
+	}
+
+	return reportTranslationResults("api", translations, keys, nil)
+}
+
+func checkFrontendTranslations() error {
+	fmt.Println("Checking frontend translation keys...")
+
+	translationFile := "./frontend/src/i18n/lang/en.json"
+	translations, err := loadTranslations(translationFile)
+	if err != nil {
+		return fmt.Errorf("error loading frontend translations: %w", err)
+	}
+
+	fmt.Printf("Loaded %d translation keys from %s\n", len(translations), translationFile)
+
+	keys, prefixes, literals, err := walkFrontendForTranslationKeys("./frontend/src")
+	if err != nil {
+		return fmt.Errorf("error walking frontend codebase: %w", err)
+	}
+
+	fmt.Printf("Found %d translation key references in the frontend codebase\n", len(keys))
+
+	// Some keys are referenced indirectly – e.g. stored as string literals in
+	// arrays and looked up by index, or assigned to a variable in the form
+	// `const path = ` + "`error.${code}`". Any literal that matches a known
+	// translation key (or is a prefix of one) is treated as a usage hint, so
+	// those keys aren't flagged as dead.
+	for lit := range literals {
+		if translations[lit] {
+			keys = append(keys, TranslationKey{Key: lit, FilePath: "<frontend literal hint>", Line: 0})
+			continue
+		}
+		// Literals that look like a key prefix (end in ".") are kept as
+		// dynamic prefixes. This catches `const path = `error.${code}``.
+		if strings.HasSuffix(lit, ".") {
+			prefixes = append(prefixes, lit)
+		}
+	}
+
+	return reportTranslationResults("frontend", translations, keys, prefixes)
+}
+
+// TranslationKey represents a translation key found in the code
+type TranslationKey struct {
+	Key      string
+	FilePath string
+	Line     int
+}
+
+// reportTranslationResults checks both missing keys (used in code but not in
+// translation file) and dead keys (in translation file but not referenced
+// anywhere in code). Returns an error if either kind of mismatch is found.
+func reportTranslationResults(label string, translations map[string]bool, keys []TranslationKey, dynamicPrefixes []string) error {
+	missingKeys := make(map[string][]TranslationKey)
+	usedKeys := make(map[string]bool, len(keys))
+	for _, key := range keys {
+		usedKeys[key.Key] = true
+		if !translations[key.Key] {
+			missingKeys[key.Key] = append(missingKeys[key.Key], key)
+		}
+	}
+
+	// A translation is used if referenced directly, or if its full dotted key
+	// starts with any prefix produced by a dynamic call site.
+	isCoveredByPrefix := func(k string) bool {
+		for _, p := range dynamicPrefixes {
+			if strings.HasPrefix(k, p) {
+				return true
+			}
+		}
+		return false
+	}
+
+	var deadKeys []string
+	for k := range translations {
+		if usedKeys[k] {
+			continue
+		}
+		if isCoveredByPrefix(k) {
+			continue
+		}
+		deadKeys = append(deadKeys, k)
+	}
+
+	var errs []error
+
+	if len(missingKeys) > 0 {
+		var missingErrs []error
+		for key, occurrences := range missingKeys {
+			var keyErrs []error
+			for _, occurrence := range occurrences {
+				keyErrs = append(keyErrs, fmt.Errorf("- %s:%d", occurrence.FilePath, occurrence.Line))
+			}
+			missingErrs = append(missingErrs, fmt.Errorf("missing key %s in files:\n%w", key, errors.Join(keyErrs...)))
+		}
+		errs = append(errs, fmt.Errorf("found %d missing %s translation keys (referenced in code but not in translation file):\n%w", len(missingKeys), label, errors.Join(missingErrs...)))
+	}
+
+	if len(deadKeys) > 0 {
+		sort.Strings(deadKeys)
+		var deadErrs []error
+		for _, k := range deadKeys {
+			deadErrs = append(deadErrs, fmt.Errorf("- %s", k))
+		}
+		errs = append(errs, fmt.Errorf("found %d dead %s translation keys (present in translation file but unused in code):\n%w", len(deadKeys), label, errors.Join(deadErrs...)))
+	}
+
+	if len(errs) > 0 {
+		return errors.Join(errs...)
+	}
+
+	printSuccess(fmt.Sprintf("All %s translation keys are in sync between code and the translation file!", label))
+	return nil
+}
+
+// loadTranslations loads a translation file and returns a flattened map
+func loadTranslations(filePath string) (map[string]bool, error) {
+	data, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading translation file: %w", err)
+	}
+
+	var translationsMap map[string]any
+	if err := json.Unmarshal(data, &translationsMap); err != nil {
+		return nil, fmt.Errorf("error parsing JSON: %w", err)
+	}
+
+	// Flatten the nested structure
+	flattenedMap := make(map[string]bool)
+	flattenTranslations("", translationsMap, flattenedMap)
+
+	return flattenedMap, nil
+}
+
+// flattenTranslations recursively flattens a nested map structure into a flat map with dot-separated keys
+func flattenTranslations(prefix string, src map[string]any, dest map[string]bool) {
+	for k, v := range src {
+		key := k
+		if prefix != "" {
+			key = prefix + "." + k
+		}
+
+		switch vv := v.(type) {
+		case string:
+			dest[key] = true
+		case map[string]any:
+			flattenTranslations(key, vv, dest)
+		}
+	}
+}
+
+// walkAPIForTranslationKeys walks the Go api code and extracts translation
+// keys referenced via string-literal arguments to i18n.T / i18n.TP, plus a
+// set of dotted string literals as "usage hints" for indirect references
+// (e.g. keys stored in a struct slice and passed to i18n.TP via a variable).
+func walkAPIForTranslationKeys(rootDir string) ([]TranslationKey, map[string]bool, error) {
+	var allKeys []TranslationKey
+	allLiterals := make(map[string]bool)
+
+	pkgDir := filepath.Join(rootDir, "pkg")
+
+	err := filepath.Walk(pkgDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() && strings.HasPrefix(info.Name(), ".") {
+			return filepath.SkipDir
+		}
+
+		if !info.IsDir() && strings.HasSuffix(path, ".go") {
+			keys, literals, err := extractAPITranslationKeysFromFile(path)
+			if err != nil {
+				fmt.Printf("Warning: %v\n", err)
+				return nil
+			}
+			allKeys = append(allKeys, keys...)
+			for l := range literals {
+				allLiterals[l] = true
+			}
+		}
+
+		return nil
+	})
+
+	return allKeys, allLiterals, err
+}
+
+// apiStringLiteralRe matches double-quoted strings in Go source that look like
+// dotted translation keys (e.g. "time.since_years"). Used to surface keys that
+// are referenced indirectly – for example, stored in a struct field and later
+// passed to i18n.TP via a variable.
+var apiStringLiteralRe = regexp.MustCompile(`"([a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+)"`)
+
+// extractAPITranslationKeysFromFile extracts all i18n.T/i18n.TP calls with
+// a string-literal key, plus all dotted string literals in the file (returned
+// as the second value) which are used as usage hints for indirect references.
+func extractAPITranslationKeysFromFile(filePath string) ([]TranslationKey, map[string]bool, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, nil, fmt.Errorf("error reading file %s: %w", filePath, err)
+	}
+
+	var keys []TranslationKey
+	literals := make(map[string]bool)
+
+	// Match i18n.T(ctx, "key") and i18n.TP(ctx, "key", count)
+	re := regexp.MustCompile(`i18n\.(T|TP)\([^,]+,\s*"([^"]+)"`)
+	matches := re.FindAllSubmatchIndex(content, -1)
+
+	for _, match := range matches {
+		if len(match) >= 6 {
+			keyStart, keyEnd := match[4], match[5]
+			key := string(content[keyStart:keyEnd])
+
+			beforeMatch := content[:keyStart]
+			lineCount := bytes.Count(beforeMatch, []byte("\n")) + 1
+
+			keys = append(keys, TranslationKey{
+				Key:      key,
+				FilePath: filePath,
+				Line:     lineCount,
+			})
+		}
+	}
+
+	for _, match := range apiStringLiteralRe.FindAllSubmatchIndex(content, -1) {
+		if len(match) >= 4 {
+			literals[string(content[match[2]:match[3]])] = true
+		}
+	}
+
+	return keys, literals, nil
+}
+
+// frontendI18nCallReSingle matches translation calls using single-quoted keys:
+//   - $t('k'), $tc('k')
+//   - t('k'), tc('k') (composable)
+//   - i18n.t('k'), i18n.global.t('k')
+//
+// Go's RE2 doesn't support backreferences, so we have one regex per quote
+// style. Template-literal and bare-variable forms are handled separately.
+var frontendI18nCallReSingle = regexp.MustCompile(`(?:\$t|\$tc|\bt|\btc|\bi18n\.(?:global\.)?t)\(\s*'([^']+)'`)
+
+// frontendI18nCallReDouble is the double-quoted counterpart of
+// frontendI18nCallReSingle.
+var frontendI18nCallReDouble = regexp.MustCompile(`(?:\$t|\$tc|\bt|\btc|\bi18n\.(?:global\.)?t)\(\s*"([^"]+)"`)
+
+// frontendI18nTemplateLiteralRe matches template-literal calls of the form
+//
+//	$t(`prefix.${expr}`)  /  t(`prefix.${...}`)  / tc(`...`) etc.
+//
+// Capturing group 1 is the portion before the first ${ substitution, which we
+// treat as a "dynamic prefix": every translation key starting with it is
+// considered used.
+var frontendI18nTemplateLiteralRe = regexp.MustCompile("(?:\\$t|\\$tc|\\bt|\\btc|\\bi18n\\.(?:global\\.)?t)\\(\\s*`([^`$]*)\\$\\{")
+
+// frontendI18nKeypathRe matches Vue template <i18n-t keypath="key.name"> usage.
+var frontendI18nKeypathRe = regexp.MustCompile(`keypath\s*=\s*"([^"]+)"`)
+
+// walkFrontendForTranslationKeys scans .vue/.ts/.js files under rootDir and
+// extracts translation key references, dynamic-key prefixes, and a set of
+// candidate string-literal usage hints (for indirect references like keys
+// stored in arrays / template literals assigned to variables).
+func walkFrontendForTranslationKeys(rootDir string) ([]TranslationKey, []string, map[string]bool, error) {
+	var allKeys []TranslationKey
+	var allPrefixes []string
+	allLiterals := make(map[string]bool)
+
+	err := filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if info.IsDir() {
+			name := info.Name()
+			// Skip hidden dirs and build artifacts
+			if strings.HasPrefix(name, ".") || name == "node_modules" || name == "dist" {
+				return filepath.SkipDir
+			}
+			// Don't walk into the language files themselves
+			if path == filepath.Join(rootDir, "i18n", "lang") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+
+		ext := filepath.Ext(path)
+		if ext != ".vue" && ext != ".ts" && ext != ".js" {
+			return nil
+		}
+
+		keys, prefixes, literals, err := extractFrontendTranslationKeysFromFile(path)
+		if err != nil {
+			fmt.Printf("Warning: %v\n", err)
+			return nil
+		}
+		allKeys = append(allKeys, keys...)
+		allPrefixes = append(allPrefixes, prefixes...)
+		for l := range literals {
+			allLiterals[l] = true
+		}
+
+		return nil
+	})
+
+	return allKeys, allPrefixes, allLiterals, err
+}
+
+// frontendStringLiteralRe matches single- or double-quoted strings that look
+// like dotted translation keys (e.g. "home.welcomeNight").
+var frontendStringLiteralRe = regexp.MustCompile(`['"]([a-zA-Z][a-zA-Z0-9_]*(?:\.[a-zA-Z0-9_]+)+)['"]`)
+
+// frontendTemplatePrefixRe matches any template-literal fragment with a ${…}
+// interpolation, whether or not it is inside a $t() call. This catches cases
+// like `const path = ` + "`error.${code}`" where the literal is assigned to
+// a variable before being passed to a translator.
+var frontendTemplatePrefixRe = regexp.MustCompile("`([a-zA-Z][a-zA-Z0-9_.]*\\.)\\$\\{")
+
+// extractFrontendTranslationKeysFromFile extracts static and dynamic
+// translation key references from a single frontend source file.
+func extractFrontendTranslationKeysFromFile(filePath string) ([]TranslationKey, []string, map[string]bool, error) {
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("error reading file %s: %w", filePath, err)
+	}
+
+	var keys []TranslationKey
+	var prefixes []string
+	literals := make(map[string]bool)
+
+	appendKey := func(keyStart int, key string) {
+		beforeMatch := content[:keyStart]
+		lineCount := bytes.Count(beforeMatch, []byte("\n")) + 1
+		keys = append(keys, TranslationKey{
+			Key:      key,
+			FilePath: filePath,
+			Line:     lineCount,
+		})
+	}
+
+	// Static string-literal calls (single- and double-quoted)
+	for _, match := range frontendI18nCallReSingle.FindAllSubmatchIndex(content, -1) {
+		if len(match) >= 4 {
+			appendKey(match[2], string(content[match[2]:match[3]]))
+		}
+	}
+	for _, match := range frontendI18nCallReDouble.FindAllSubmatchIndex(content, -1) {
+		if len(match) >= 4 {
+			appendKey(match[2], string(content[match[2]:match[3]]))
+		}
+	}
+
+	// <i18n-t keypath="..."> (Vue component usage in templates)
+	for _, match := range frontendI18nKeypathRe.FindAllSubmatchIndex(content, -1) {
+		if len(match) >= 4 {
+			appendKey(match[2], string(content[match[2]:match[3]]))
+		}
+	}
+
+	// Template-literal calls with interpolation inside a $t(). We extract the
+	// static prefix before ${ and mark every matching key as used.
+	for _, match := range frontendI18nTemplateLiteralRe.FindAllSubmatchIndex(content, -1) {
+		if len(match) >= 4 {
+			prefix := string(content[match[2]:match[3]])
+			if prefix != "" {
+				prefixes = append(prefixes, prefix)
+			}
+		}
+	}
+
+	// Collect dotted string literals and interpolated template-literal prefixes
+	// as "usage hints". These are only used to suppress dead-key false positives
+	// for indirect references (keys stored in arrays, prefix assigned to a
+	// variable then passed to a translator, etc).
+	for _, match := range frontendStringLiteralRe.FindAllSubmatchIndex(content, -1) {
+		if len(match) >= 4 {
+			literals[string(content[match[2]:match[3]])] = true
+		}
+	}
+	for _, match := range frontendTemplatePrefixRe.FindAllSubmatchIndex(content, -1) {
+		if len(match) >= 4 {
+			literals[string(content[match[2]:match[3]])] = true
+		}
+	}
+
+	return keys, prefixes, literals, nil
+}
+
+func checkGolangCiLintInstalled(ctx context.Context) error {
+	mg.Deps(initVars, ensureFrontendDistExists)
+	if err := exec.CommandContext(ctx, "golangci-lint").Run(); err != nil && strings.Contains(err.Error(), "executable file not found") {
+		return fmt.Errorf("golangci-lint executable failed to run, please manually install golangci-lint by running the command: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.13.0")
+	}
+	return nil
+}
+
+func (Check) Golangci(ctx context.Context) error {
+	if err := checkGolangCiLintInstalled(ctx); err != nil {
+		return err
+	}
+	return runAndStreamOutput(ctx, "golangci-lint", "run")
+}
+
+func (Check) GolangciFix(ctx context.Context) error {
+	if err := checkGolangCiLintInstalled(ctx); err != nil {
+		return err
+	}
+	return runAndStreamOutput(ctx, "golangci-lint", "run", "--fix")
+}
+
+// All runs golangci and the swagger test in parallel
+func (Check) All() {
+	mg.Deps(initVars)
+	mg.Deps(
+		Check.Golangci,
+		Check.GotSwag,
+		Check.Translations,
+		Check.YaegiSymbols,
+	)
+}
+
+type Build mg.Namespace
+
+// Clean cleans all build, executable and bindata files
+func (Build) Clean(ctx context.Context) error {
+	mg.Deps(initVars)
+	if err := exec.CommandContext(ctx, "go", "clean", "./...").Run(); err != nil {
+		return err
+	}
+	if err := os.Remove(Executable); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.RemoveAll(DIST); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	if err := os.RemoveAll(BinLocation); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// Build builds a vikunja binary, ready to run
+func (Build) Build(ctx context.Context) error {
+	mg.Deps(initVars, ensureFrontendDistExists)
+	return runAndStreamOutput(ctx, "go", "build", goDetectVerboseFlag(), "-tags", Tags, "-ldflags", "-s -w "+Ldflags, "-o", Executable)
+}
+
+func (Build) SaveVersionToFile() error {
+	// Open the file for writing. If the file doesn't exist, create it.
+	// If it exists, truncate it.
+	file, err := os.Create("VERSION")
+	if err != nil {
+		return fmt.Errorf("error creating VERSION file: %w", err)
+	}
+	defer file.Close()
+
+	// Write the version number to the file
+	_, err = file.WriteString(VersionNumber)
+	if err != nil {
+		return fmt.Errorf("error writing to VERSION file: %w", err)
+	}
+
+	fmt.Println("Version number saved successfully to VERSION file")
+
+	return nil
+}
+
+type Dev mg.Namespace
+
+// MakeMigration creates a new bare db migration skeleton in pkg/migration.
+// If you pass the struct name as an argument, the prompt will be skipped.
+func (Dev) MakeMigration(name string) error {
+	str := strings.TrimSpace(name)
+	if str == "" {
+		reader := bufio.NewReader(os.Stdin)
+		fmt.Print("Enter the name of the struct: ")
+		s, _ := reader.ReadString('\n')
+		str = strings.TrimSpace(s)
+	}
+
+	date := time.Now().Format("20060102150405")
+
+	migration := `// Vikunja is a to-do list application to facilitate your life.
+// Copyright 2018-present Vikunja and contributors. All rights reserved.
+//
+// This program is free software: you can redistribute it and/or modify
+// it under the terms of the GNU Affero General Public License as published by
+// the Free Software Foundation, either version 3 of the License, or
+// (at your option) any later version.
+//
+// This program is distributed in the hope that it will be useful,
+// but WITHOUT ANY WARRANTY; without even the implied warranty of
+// MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+// GNU Affero General Public License for more details.
+//
+// You should have received a copy of the GNU Affero General Public License
+// along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+package migration
+
+import (
+	"src.techknowlogick.com/xormigrate"
+	"xorm.io/xorm"
+)
+
+type ` + str + date + ` struct {
+}
+
+func (` + str + date + `) TableName() string {
+	return "` + str + `"
+}
+
+func init() {
+	migrations = append(migrations, &xormigrate.Migration{
+		ID:          "` + date + `",
+		Description: "",
+		Migrate: func(tx *xorm.Engine) error {
+			return partialSync(tx, ` + str + date + `{})
+		},
+		Rollback: func(tx *xorm.Engine) error {
+			return nil
+		},
+	})
+}
+`
+	filename := "./pkg/migration/" + date + ".go"
+	f, err := os.Create(filename)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	if _, err := f.WriteString(migration); err != nil {
+		return err
+	}
+
+	printSuccess("Migration has been created at %s!", filename)
+
+	return nil
+}
+
+// MakeEvent create a new event. Takes the name of the event as the first argument and the module where the event should be created as the second argument. Events will be appended to the pkg/<module>/events.go file.
+func (Dev) MakeEvent(name, module string) error {
+	name = strcase.ToCamel(name)
+
+	if !strings.HasSuffix(name, "Event") {
+		name += "Event"
+	}
+
+	eventName := strings.ReplaceAll(strcase.ToDelimited(name, '.'), ".event", "")
+
+	newEventCode := `
+// ` + name + ` represents a ` + name + ` event
+type ` + name + ` struct {
+}
+
+// Name defines the name for ` + name + `
+func (t *` + name + `) Name() string {
+	return "` + eventName + `"
+}
+`
+	filename := "./pkg/" + module + "/events.go"
+	if err := appendToFile(filename, newEventCode); err != nil {
+		return err
+	}
+
+	printSuccess("The new event has been created successfully! Head over to %s and adjust its content.", filename)
+
+	return nil
+}
+
+// MakeListener create a new listener for an event. Takes the name of the listener, the name of the event to listen to and the module where everything should be placed as parameters.
+func (Dev) MakeListener(name, event, module string) error {
+	name = strcase.ToCamel(name)
+	listenerName := strcase.ToDelimited(name, '.')
+	listenerCode := `
+// ` + name + `  represents a listener
+type ` + name + ` struct {
+}
+
+// Name defines the name for the ` + name + ` listener
+func (s *` + name + `) Name() string {
+	return "` + listenerName + `"
+}
+
+// Handle is executed when the event ` + name + ` listens on is fired
+func (s *` + name + `) Handle(msg *message.Message) (err error) {
+	event := &` + event + `{}
+	err = json.Unmarshal(msg.Payload, event)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+`
+	filename := "./pkg/" + module + "/listeners.go"
+
+	//////
+	// Register the listener
+
+	file, err := os.Open(filename)
+	if err != nil {
+		return err
+	}
+
+	scanner := bufio.NewScanner(file)
+	var idx int64
+	for scanner.Scan() {
+		if scanner.Text() == "}" {
+			// idx -= int64(len(scanner.Text()))
+			break
+		}
+		idx += int64(len(scanner.Bytes()) + 1)
+	}
+	file.Close()
+
+	registerListenerCode := `	events.RegisterListener((&` + event + `{}).Name(), &` + name + `{})
+`
+
+	f, err := os.OpenFile(filename, os.O_RDWR, 0o600)
+	if err != nil {
+		return err
+	}
+
+	defer f.Close()
+
+	if _, err := f.Seek(idx, 0); err != nil {
+		return err
+	}
+	remainder, err := io.ReadAll(f)
+	if err != nil {
+		return err
+	}
+	if _, err := f.Seek(idx, 0); err != nil {
+		return err
+	}
+	if _, err := f.Write([]byte(registerListenerCode)); err != nil {
+		return err
+	}
+	if _, err := f.Write(remainder); err != nil {
+		return err
+	}
+
+	///////
+	// Append the listener code
+	if err := appendToFile(filename, listenerCode); err != nil {
+		return err
+	}
+
+	printSuccess("The new listener has been created successfully! Head over to %s and adjust its content.", filename)
+
+	return nil
+}
+
+// MakeNotification create a new notification. Takes the name of the notification as the first argument and the module where the notification should be created as the second argument. Notifications will be appended to the pkg/<module>/notifications.go file.
+func (Dev) MakeNotification(name, module string) error {
+	name = strcase.ToCamel(name)
+
+	if !strings.HasSuffix(name, "Notification") {
+		name += "Notification"
+	}
+
+	notficationName := strings.ReplaceAll(strcase.ToDelimited(name, '.'), ".notification", "")
+
+	newNotificationCode := `
+// ` + name + ` represents a ` + name + ` notification
+type ` + name + ` struct {
+}
+
+// ToMail returns the mail notification for ` + name + `
+func (n *` + name + `) ToMail(lang string) *notifications.Mail {
+	return notifications.NewMail().
+		Subject("").
+		Greeting("Hi ").
+		Line("").
+		Action("", "")
+}
+
+// ToDB returns the ` + name + ` notification in a format which can be saved in the db
+func (n *` + name + `) ToDB() any {
+	return nil
+}
+
+// Name returns the name of the notification
+func (n *` + name + `) Name() string {
+	return "` + notficationName + `"
+}
+
+`
+	filename := "./pkg/" + module + "/notifications.go"
+	if err := appendToFile(filename, newNotificationCode); err != nil {
+		return err
+	}
+
+	printSuccess("The new notification has been created successfully! Head over to %s and adjust its content.", filename)
+
+	return nil
+}
+
+type Generate mg.Namespace
+
+const DefaultConfigYAMLSamplePath = "config.yml.sample"
+
+func (Generate) FrontendClient(ctx context.Context) error {
+	api, err := apiv2.NewCanonicalAPI()
+	if err != nil {
+		return err
+	}
+
+	spec, err := os.CreateTemp("", "vikunja-openapi-*.json")
+	if err != nil {
+		return fmt.Errorf("create temporary OpenAPI document: %w", err)
+	}
+	specPath := spec.Name()
+	defer func() { _ = os.Remove(specPath) }()
+
+	if err := json.NewEncoder(spec).Encode(api.OpenAPI()); err != nil {
+		_ = spec.Close()
+		return fmt.Errorf("write temporary OpenAPI document: %w", err)
+	}
+	if err := spec.Close(); err != nil {
+		return fmt.Errorf("close temporary OpenAPI document: %w", err)
+	}
+
+	cmd := exec.CommandContext(ctx, "pnpm", "run", "generate:api-client")
+	cmd.Dir = "frontend"
+	cmd.Env = append(os.Environ(), "VIKUNJA_OPENAPI_INPUT="+specPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("generate frontend API client: %w", err)
+	}
+
+	return nil
+}
+
+// SwaggerDocs generates the swagger docs from the code annotations
+func (Generate) SwaggerDocs(ctx context.Context) error {
+	mg.Deps(initVars)
+
+	if err := checkAndInstallGoTool(ctx, "swag", "github.com/swaggo/swag/cmd/swag"); err != nil {
+		return err
+	}
+	return runAndStreamOutput(ctx, "swag", "init", "-g", "./pkg/routes/routes.go", "--parseDependency", "-d", ".", "-o", "./pkg/swagger")
+}
+
+const yaegiSymbolsDir = "./pkg/yaegi_symbols"
+
+// yaegiSymbolPackages maps extracted import paths to their checked-in file names in pkg/yaegi_symbols.
+var yaegiSymbolPackages = []struct {
+	importPath string
+	outFile    string
+}{
+	{"code.vikunja.io/api/pkg/config", "vikunja_config.go"},
+	{"code.vikunja.io/api/pkg/db", "vikunja_db.go"},
+	{"code.vikunja.io/api/pkg/events", "vikunja_events.go"},
+	{"code.vikunja.io/api/pkg/log", "vikunja_log.go"},
+	{"code.vikunja.io/api/pkg/models", "vikunja_models.go"},
+	{"code.vikunja.io/api/pkg/plugins", "vikunja_plugins.go"},
+	{"code.vikunja.io/api/pkg/user", "vikunja_user.go"},
+	{"github.com/labstack/echo/v5", "echo.go"},
+	{"github.com/ThreeDotsLabs/watermill/message", "watermill.go"},
+	{"github.com/spf13/viper", "viper.go"},
+	{"src.techknowlogick.com/xormigrate", "xormigrate.go"},
+	{"xorm.io/xorm", "xorm.go"},
+}
+
+// YaegiSymbols regenerates the yaegi symbol tables in pkg/yaegi_symbols so
+// interpreted plugins see the current exported API.
+func (Generate) YaegiSymbols(ctx context.Context) error {
+	mg.Deps(initVars)
+
+	// Same replacer yaegi's extract command uses to derive the output file name.
+	replacer := strings.NewReplacer("/", "-", ".", "_", "~", "_")
+
+	for _, p := range yaegiSymbolPackages {
+		c := exec.CommandContext(ctx, "go", "run", "github.com/traefik/yaegi/cmd/yaegi", "extract", p.importPath) //nolint:gosec // import paths come from the hard-coded yaegiSymbolPackages list
+		c.Dir = yaegiSymbolsDir
+		c.Env = append(os.Environ(), "GOPACKAGE=yaegi_symbols")
+		c.Stdout = os.Stdout
+		c.Stderr = os.Stderr
+		fmt.Printf("%s\n\n", c.String())
+		if err := c.Run(); err != nil {
+			return fmt.Errorf("error extracting yaegi symbols for %s: %w", p.importPath, err)
+		}
+
+		// yaegi extract exits 0 even when extraction fails, so the missing
+		// output file surfaces here as a rename error.
+		generated := filepath.Join(yaegiSymbolsDir, replacer.Replace(p.importPath)+".go")
+		if err := os.Rename(generated, filepath.Join(yaegiSymbolsDir, p.outFile)); err != nil {
+			return fmt.Errorf("error renaming extracted yaegi symbols for %s: %w", p.importPath, err)
+		}
+	}
+	return nil
+}
+
+type ConfigNode struct {
+	Key      string        `json:"key,omitempty"`
+	Value    any           `json:"default_value,omitempty"`
+	Comment  string        `json:"comment,omitempty"`
+	Children []*ConfigNode `json:"children,omitempty"`
+}
+
+func convertConfigJSONToYAML(node *ConfigNode, indent int, isTopLevel bool, parentKey string, commentOut bool) string {
+	var result strings.Builder
+
+	writeComment := func(comment string, indent int) {
+		indent = int(math.Max(float64(indent), 0))
+		if comment != "" {
+			commentLines := strings.Split(comment, "\n")
+			for _, line := range commentLines {
+				result.WriteString(strings.Repeat("  ", indent))
+				result.WriteString("# " + line + "\n")
+			}
+		}
+	}
+
+	writeLine := func(line string, indent int) {
+		indent = int(math.Max(float64(indent), 0))
+		if commentOut {
+			result.WriteString(strings.Repeat("  ", indent) + "# " + line + "\n")
+		} else {
+			result.WriteString(strings.Repeat("  ", indent) + line + "\n")
+		}
+	}
+
+	if isTopLevel {
+		writeComment(node.Comment, indent)
+	}
+
+	if node.Key != "" {
+		if !isTopLevel {
+			writeComment(node.Comment, indent)
+		}
+		line := node.Key + ":"
+		if node.Value != nil {
+			value := node.Value
+			if value == nil {
+				value = node.Value
+			}
+			line += " " + formatValue(value)
+		}
+		writeLine(line, indent)
+	}
+
+	if len(node.Children) > 0 {
+		isProviders := node.Key == "providers" && parentKey == "openid"
+		isArray := len(node.Children) > 0 && node.Children[0].Key == ""
+		for i, child := range node.Children {
+			switch {
+			case isProviders:
+				writeComment(child.Comment, indent+1)
+				writeLine("-", indent+1)
+				result.WriteString(convertConfigJSONToYAML(child, indent+1, false, node.Key, commentOut))
+			case isArray:
+				writeComment(child.Comment, indent+1)
+				writeLine("- "+formatValue(child.Value), indent+1)
+			default:
+				result.WriteString(convertConfigJSONToYAML(child, indent+1, false, node.Key, commentOut))
+			}
+			if i == len(node.Children)-1 && !isProviders && !isArray {
+				writeLine("", indent)
+			}
+		}
+	}
+
+	return result.String()
+}
+
+func formatValue(value any) string {
+	switch v := value.(type) {
+	case string:
+		if intValue, err := strconv.Atoi(v); err == nil {
+			return fmt.Sprintf("%d", intValue)
+		}
+		if floatValue, err := strconv.ParseFloat(v, 64); err == nil {
+			return fmt.Sprintf("%g", floatValue)
+		}
+		if boolValue, err := strconv.ParseBool(v); err == nil {
+			return fmt.Sprintf("%v", boolValue)
+		}
+		return fmt.Sprintf("%q", v)
+	case float64:
+		return fmt.Sprintf("%g", v)
+	case int:
+		return fmt.Sprintf("%d", v)
+	case bool:
+		return fmt.Sprintf("%v", v)
+	case nil:
+		return ""
+	default:
+		return fmt.Sprintf("%v", v)
+	}
+}
+
+func generateConfigYAMLFromJSON(yamlPath string, commented bool) {
+	jsonData, err := os.ReadFile("config-raw.json")
+	if err != nil {
+		fmt.Println("Error reading JSON file:", err)
+		return
+	}
+
+	var root ConfigNode
+	err = json.Unmarshal(jsonData, &root)
+	if err != nil {
+		fmt.Println("Error parsing JSON:", err)
+		return
+	}
+
+	yamlData := convertConfigJSONToYAML(&root, -1, true, "", commented)
+
+	err = os.WriteFile(yamlPath, []byte(yamlData), 0o600)
+	if err != nil {
+		fmt.Println("Error writing YAML file:", err)
+		return
+	}
+
+	fmt.Println("Successfully generated " + yamlPath)
+}
+
+// ConfigYAML create a yaml config file from the config-raw.json definition
+func (Generate) ConfigYAML(commented bool) {
+	generateConfigYAMLFromJSON(DefaultConfigYAMLSamplePath, commented)
+}
+
+// ScalarBundle downloads the Scalar API reference standalone JS bundle into
+// pkg/routes/api/v2/scalar/. Version is pinned to match the Scalar version
+// used in Huma's internal docs at the time of last update.
+func (Generate) ScalarBundle() error {
+	const (
+		version = "1.44.20"
+		dest    = "pkg/routes/api/v2/scalar/scalar.standalone.js"
+	)
+	url := fmt.Sprintf("https://unpkg.com/@scalar/api-reference@%s/dist/browser/standalone.js", version)
+
+	fmt.Printf("Downloading Scalar bundle %s from %s\n", version, url)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil) //nolint:gosec // This is a dev-only mage task and the URL is hard-coded above.
+	if err != nil {
+		return fmt.Errorf("build scalar bundle request: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("download scalar bundle: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("download scalar bundle: unexpected status %s", resp.Status)
+	}
+
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, resp.Body); err != nil {
+		return fmt.Errorf("read scalar bundle body: %w", err)
+	}
+
+	if err := os.WriteFile(dest, buf.Bytes(), 0o600); err != nil {
+		return fmt.Errorf("write %s: %w", dest, err)
+	}
+
+	fmt.Printf("Wrote %d bytes to %s\n", buf.Len(), dest)
+	return nil
+}
+
+func localBranchExists(ctx context.Context, name string) bool {
+	return exec.CommandContext(ctx, "git", "show-ref", "--verify", "--quiet", "refs/heads/"+name).Run() == nil //nolint:gosec // This is a dev-only mage task and the branch name is supplied by the developer running it.
+}
+
+func remoteBranchExists(ctx context.Context, name string) bool {
+	return exec.CommandContext(ctx, "git", "show-ref", "--verify", "--quiet", "refs/remotes/"+name).Run() == nil //nolint:gosec // This is a dev-only mage task and the branch name is supplied by the developer running it.
+}
+
+// PrepareWorktree creates a new git worktree for development.
+// The first argument is the name, which becomes both the folder name and branch name.
+// If a local branch with that name exists, it is checked out.
+// If a remote branch origin/<name> exists, a local tracking branch is created.
+// Otherwise a new branch is created.
+// The second argument is a path to a plan file that will be moved to the new worktree (pass "" to skip).
+// The worktree is created in the parent directory (../).
+// It also copies the current config.yml with an updated rootpath, and initializes the frontend.
+func (Dev) PrepareWorktree(ctx context.Context, name string, planPath string) error {
+	if name == "" {
+		return fmt.Errorf("name is required: mage dev:prepare-worktree <name> <plan-path>")
+	}
+
+	// Get the parent directory path
+	worktreePath := filepath.Join("..", name)
+
+	fmt.Printf("Creating worktree at %s with branch %s...\n", worktreePath, name)
+
+	// Refresh remote refs so remote-branch detection is reliable.
+	fetchCmd := exec.CommandContext(ctx, "git", "fetch", "origin")
+	fetchCmd.Stdout = os.Stdout
+	fetchCmd.Stderr = os.Stderr
+	if err := fetchCmd.Run(); err != nil {
+		fmt.Printf("Warning: git fetch failed: %v\n", err)
+	}
+
+	var worktreeArgs []string
+	switch {
+	case localBranchExists(ctx, name):
+		fmt.Printf("Local branch %s exists, checking it out.\n", name)
+		worktreeArgs = []string{"worktree", "add", worktreePath, name}
+	case remoteBranchExists(ctx, "origin/"+name):
+		fmt.Printf("Remote branch origin/%s exists, creating tracking branch.\n", name)
+		worktreeArgs = []string{"worktree", "add", "--track", "-b", name, worktreePath, "origin/" + name}
+	default:
+		fmt.Printf("Creating new branch %s.\n", name)
+		worktreeArgs = []string{"worktree", "add", worktreePath, "-b", name}
+	}
+
+	cmd := exec.CommandContext(ctx, "git", worktreeArgs...)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create worktree: %w", err)
+	}
+	printSuccess("Worktree created successfully!")
+
+	// Copy and modify config.yml
+	configSrc := "config.yml"
+	configDst := filepath.Join(worktreePath, "config.yml")
+
+	if _, err := os.Stat(configSrc); err == nil {
+		configContent, err := os.ReadFile(configSrc)
+		if err != nil {
+			return fmt.Errorf("failed to read config.yml: %w", err)
+		}
+
+		// Replace the rootpath value
+		re := regexp.MustCompile(`(?m)^(\s*rootpath:\s*)"[^"]*"`)
+		newConfig := re.ReplaceAllString(string(configContent), `${1}"`+worktreePath+`"`)
+
+		// Also handle unquoted rootpath values
+		re2 := regexp.MustCompile(`(?m)^(\s*rootpath:\s*)(/[^\s\n]+)`)
+		newConfig = re2.ReplaceAllString(newConfig, `${1}"`+worktreePath+`"`)
+
+		if err := os.WriteFile(configDst, []byte(newConfig), 0o600); err != nil {
+			return fmt.Errorf("failed to write config.yml: %w", err)
+		}
+		printSuccess("Config copied with updated rootpath!")
+	} else {
+		fmt.Println("Warning: config.yml not found, skipping config copy")
+	}
+
+	// Copy .claude/settings.local.json if it exists
+	claudeSettingsSrc := filepath.Join(".claude", "settings.local.json")
+	if _, err := os.Stat(claudeSettingsSrc); err == nil {
+		claudeDir := filepath.Join(worktreePath, ".claude")
+		if err := os.MkdirAll(claudeDir, 0o755); err != nil {
+			return fmt.Errorf("failed to create .claude directory: %w", err)
+		}
+		claudeSettingsDst := filepath.Join(claudeDir, "settings.local.json")
+		if err := copyFile(claudeSettingsSrc, claudeSettingsDst); err != nil {
+			return fmt.Errorf("failed to copy .claude/settings.local.json: %w", err)
+		}
+		printSuccess("Claude settings copied!")
+	}
+
+	// Copy plan file if provided
+	if planPath != "" {
+		planPath = strings.TrimSpace(planPath)
+		if planPath != "" {
+			// Create plans directory in the new worktree
+			plansDir := filepath.Join(worktreePath, "plans")
+			if err := os.MkdirAll(plansDir, 0o755); err != nil {
+				return fmt.Errorf("failed to create plans directory: %w", err)
+			}
+
+			// Determine source path (relative to current directory or absolute)
+			srcPlanPath := planPath
+			if !filepath.IsAbs(planPath) {
+				srcPlanPath = planPath
+			}
+
+			if _, err := os.Stat(srcPlanPath); err != nil {
+				return fmt.Errorf("plan file not found: %s", srcPlanPath)
+			}
+
+			dstPlanPath := filepath.Join(plansDir, filepath.Base(planPath))
+			if err := os.Rename(srcPlanPath, dstPlanPath); err != nil {
+				return fmt.Errorf("failed to move plan file: %w", err)
+			}
+			printSuccess("Plan file moved to %s!", dstPlanPath)
+		}
+	}
+
+	// Initialize frontend
+	fmt.Println("Initializing frontend...")
+	frontendDir := filepath.Join(worktreePath, "frontend")
+
+	if err := ensureFrontendDistExistsIn(worktreePath); err != nil {
+		return err
+	}
+
+	// Run pnpm install
+	pnpmCmd := exec.CommandContext(ctx, "pnpm", "i")
+	pnpmCmd.Dir = frontendDir
+	pnpmCmd.Stdout = os.Stdout
+	pnpmCmd.Stderr = os.Stderr
+	if err := pnpmCmd.Run(); err != nil {
+		return fmt.Errorf("failed to run pnpm install: %w", err)
+	}
+
+	// Run patch-sass-embedded (shell alias from devenv)
+	patchCmd := exec.CommandContext(ctx, "bash", "-ic", "patch-sass-embedded")
+	patchCmd.Dir = frontendDir
+	patchCmd.Stdout = os.Stdout
+	patchCmd.Stderr = os.Stderr
+	if err := patchCmd.Run(); err != nil {
+		// patch-sass-embedded might not be critical, just warn
+		fmt.Printf("Warning: patch-sass-embedded failed: %v\n", err)
+	}
+
+	printSuccess("Frontend initialized!")
+	printSuccess("\nWorktree ready at: %s", worktreePath)
+	printSuccess("Branch: %s", name)
+	fmt.Println("\nTo start working:")
+	fmt.Printf("  cd %s\n", worktreePath)
+
+	return nil
+}
+
+// printReleaseStats prints commit statistics for the range between two refs.
+func printReleaseStats(ctx context.Context, fromRef, toRef string) error {
+	output, err := runGitCommandWithOutput(ctx, "log", fromRef+".."+toRef, "--oneline")
+	if err != nil {
+		return fmt.Errorf("failed to get commit log: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
+	if len(lines) == 1 && lines[0] == "" {
+		fmt.Println("\nNo commits found in range.")
+		return nil
+	}
+
+	total := len(lines)
+	fixes := 0
+	features := 0
+	deps := 0
+	other := 0
+
+	depsRe := regexp.MustCompile(`(?i)(chore|build|ci)(\(deps\)|.*dependab|.*bump|.*update.*depend)`)
+
+	for _, line := range lines {
+		// Strip the short hash prefix to get the commit message
+		parts := strings.SplitN(line, " ", 2)
+		if len(parts) < 2 {
+			other++
+			continue
+		}
+		msg := parts[1]
+
+		switch {
+		case strings.HasPrefix(msg, "fix"):
+			fixes++
+		case strings.HasPrefix(msg, "feat"):
+			features++
+		case depsRe.MatchString(msg):
+			deps++
+		default:
+			other++
+		}
+	}
+
+	fmt.Printf("\nCommit statistics (%s..%s):\n", fromRef, toRef)
+	fmt.Printf("  Total:               %d\n", total)
+	fmt.Printf("  Fixes:               %d (%d%%)\n", fixes, fixes*100/total)
+	fmt.Printf("  Features:            %d (%d%%)\n", features, features*100/total)
+	fmt.Printf("  Dependency updates:  %d (%d%%)\n", deps, deps*100/total)
+	fmt.Printf("  Other:               %d (%d%%)\n", other, other*100/total)
+	fmt.Println()
+
+	return nil
+}
+
+// commitPathIfChanged stages and commits everything under path if it has
+// uncommitted changes. No-op when the path is clean.
+func commitPathIfChanged(ctx context.Context, path, message string) error {
+	status, err := runGitCommandWithOutput(ctx, "status", "--porcelain", "--", path)
+	if err != nil {
+		return fmt.Errorf("failed to check git status for %s: %w", path, err)
+	}
+
+	if strings.TrimSpace(string(status)) == "" {
+		fmt.Printf("%s is up to date, nothing to commit.\n", path)
+		return nil
+	}
+
+	if err := exec.CommandContext(ctx, "git", "add", path).Run(); err != nil {
+		return fmt.Errorf("failed to stage %s: %w", path, err)
+	}
+
+	cmd := exec.CommandContext(ctx, "git", "commit", "-m", message)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit %s: %w", path, err)
+	}
+
+	return nil
+}
+
+// TagRelease creates a new release tag with changelog.
+// It updates the version badge in README.md, generates changelog using git-cliff,
+// commits the changes, and creates an annotated tag.
+func (Dev) TagRelease(ctx context.Context, version string) error {
+	if version == "" {
+		return fmt.Errorf("version is required: mage dev:tag-release <version>")
+	}
+
+	// Ensure version starts with 'v'
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+
+	fmt.Printf("Creating release %s...\n", version)
+
+	// Get the last tag
+	lastTagBytes, err := runGitCommandWithOutput(ctx, "describe", "--tags", "--abbrev=0")
+	if err != nil {
+		return fmt.Errorf("failed to get last tag: %w", err)
+	}
+	lastTag := strings.TrimSpace(string(lastTagBytes))
+	fmt.Printf("Last tag: %s\n", lastTag)
+
+	// Print commit statistics
+	if err := printReleaseStats(ctx, lastTag, "HEAD"); err != nil {
+		fmt.Printf("Warning: could not print release stats: %v\n", err)
+	}
+
+	// Generate changelog using git cliff
+	fmt.Println("Generating changelog...")
+	changelogBytes, err := runGitCommandWithOutput(ctx, "cliff", lastTag+"..HEAD", "--tag", version)
+	if err != nil {
+		return fmt.Errorf("failed to generate changelog: %w", err)
+	}
+	changelog := string(changelogBytes)
+
+	// Clean up the changelog
+	changelog = cleanupChangelog(changelog)
+
+	// Generated files must be part of the tag, so regenerate them here instead of
+	// waiting for the workflow which only commits them after the release ran.
+	fmt.Println("Regenerating swagger docs...")
+	if err := (Generate{}).SwaggerDocs(ctx); err != nil {
+		return fmt.Errorf("failed to generate swagger docs: %w", err)
+	}
+	if err := commitPathIfChanged(ctx, "pkg/swagger", "[skip ci] Updated swagger docs"); err != nil {
+		return err
+	}
+
+	fmt.Println("Regenerating yaegi symbols...")
+	if err := (Generate{}).YaegiSymbols(ctx); err != nil {
+		return fmt.Errorf("failed to generate yaegi symbols: %w", err)
+	}
+	if err := commitPathIfChanged(ctx, "pkg/yaegi_symbols", "[skip ci] Updated yaegi symbols"); err != nil {
+		return err
+	}
+
+	// Update README.md version badge
+	fmt.Println("Updating README.md version badge...")
+	if err := updateReadmeBadge(version); err != nil {
+		return fmt.Errorf("failed to update README badge: %w", err)
+	}
+
+	// Prepend changelog to CHANGELOG.md
+	fmt.Println("Updating CHANGELOG.md...")
+	if err := prependChangelog(changelog); err != nil {
+		return fmt.Errorf("failed to update CHANGELOG.md: %w", err)
+	}
+
+	// Update frontend package.json version
+	fmt.Println("Updating frontend package.json version...")
+	if err := updateFrontendPackageJSON(version); err != nil {
+		return fmt.Errorf("failed to update frontend package.json: %w", err)
+	}
+
+	// Update publiccode.yml version and release date
+	fmt.Println("Updating publiccode.yml...")
+	if err := updatePublicCodeYml(version); err != nil {
+		return fmt.Errorf("failed to update publiccode.yml: %w", err)
+	}
+
+	// Commit the changes
+	fmt.Println("Committing changes...")
+	commitMsg := fmt.Sprintf("chore: %s release preparations", version)
+	cmd := exec.CommandContext(ctx, "git", "add", "README.md", "CHANGELOG.md", "frontend/package.json", "publiccode.yml")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to stage files: %w", err)
+	}
+
+	cmd = exec.CommandContext(ctx, "git", "commit", "-m", commitMsg)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to commit: %w", err)
+	}
+
+	// Prepare tag message (remove markdown header formatting)
+	tagMessage := prepareTagMessage(changelog)
+
+	// Create the annotated tag
+	fmt.Printf("Creating tag %s...\n", version)
+	cmd = exec.CommandContext(ctx, "git", "tag", "-a", version, "-m", tagMessage)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create tag: %w", err)
+	}
+
+	printSuccess("Release %s created successfully!", version)
+	fmt.Println("\nNext steps:")
+	fmt.Println("  git push origin main")
+	fmt.Printf("  git push origin %s\n", version)
+
+	return nil
+}
+
+// cleanupChangelog cleans up the generated changelog by:
+// - Removing duplicate lines
+// - Fixing entries that span multiple lines
+// - Ensuring each change is on a single line
+func cleanupChangelog(changelog string) string {
+	lines := strings.Split(changelog, "\n")
+	var cleanedLines []string
+	seenLines := make(map[string]bool)
+	var currentEntry strings.Builder
+
+	for i, line := range lines {
+		trimmedLine := strings.TrimSpace(line)
+
+		// Check if this is a new entry (starts with * or - or is a header)
+		isNewEntry := strings.HasPrefix(trimmedLine, "* ") ||
+			strings.HasPrefix(trimmedLine, "- ") ||
+			strings.HasPrefix(trimmedLine, "## ") ||
+			strings.HasPrefix(trimmedLine, "### ") ||
+			trimmedLine == ""
+
+		switch {
+		case isNewEntry:
+			// Flush the current entry if any
+			if currentEntry.Len() > 0 {
+				entryStr := strings.TrimSpace(currentEntry.String())
+				if !seenLines[entryStr] && entryStr != "" {
+					cleanedLines = append(cleanedLines, entryStr)
+					seenLines[entryStr] = true
+				}
+				currentEntry.Reset()
+			}
+
+			// Start a new entry or add empty line/header
+			switch {
+			case trimmedLine == "":
+				// Only add empty line if the previous line wasn't empty
+				if len(cleanedLines) > 0 && cleanedLines[len(cleanedLines)-1] != "" {
+					cleanedLines = append(cleanedLines, "")
+				}
+			case strings.HasPrefix(trimmedLine, "## ") || strings.HasPrefix(trimmedLine, "### "):
+				// Headers are never duplicates
+				cleanedLines = append(cleanedLines, trimmedLine)
+			default:
+				currentEntry.WriteString(trimmedLine)
+			}
+		case currentEntry.Len() > 0:
+			// This is a continuation of the current entry
+			currentEntry.WriteString(" ")
+			currentEntry.WriteString(trimmedLine)
+		case trimmedLine != "":
+			// Standalone line that's not part of an entry
+			if !seenLines[trimmedLine] {
+				cleanedLines = append(cleanedLines, trimmedLine)
+				seenLines[trimmedLine] = true
+			}
+		}
+
+		// Handle last line
+		if i == len(lines)-1 && currentEntry.Len() > 0 {
+			entryStr := strings.TrimSpace(currentEntry.String())
+			if !seenLines[entryStr] && entryStr != "" {
+				cleanedLines = append(cleanedLines, entryStr)
+			}
+		}
+	}
+
+	return strings.Join(cleanedLines, "\n")
+}
+
+// updateReadmeBadge updates the version badge in README.md
+func updateReadmeBadge(version string) error {
+	readmePath := "README.md"
+	content, err := os.ReadFile(readmePath)
+	if err != nil {
+		return fmt.Errorf("failed to read README.md: %w", err)
+	}
+
+	// Convert version for badge (e.g., v1.0.0-rc3 -> v1.0.0rc3 for the badge display)
+	badgeVersion := strings.ReplaceAll(version, "-", "")
+
+	// Update the badge - match the pattern: download-vX.X.X...-brightgreen
+	re := regexp.MustCompile(`(download-)(v[0-9a-zA-Z.]+)(-brightgreen)`)
+	newContent := re.ReplaceAllString(string(content), "${1}"+badgeVersion+"${3}")
+
+	if err := os.WriteFile(readmePath, []byte(newContent), 0o600); err != nil {
+		return fmt.Errorf("failed to write README.md: %w", err)
+	}
+
+	return nil
+}
+
+// updateFrontendPackageJSON updates the version field in frontend/package.json.
+func updateFrontendPackageJSON(version string) error {
+	// npm convention: no "v" prefix
+	npmVersion := strings.TrimPrefix(version, "v")
+
+	pkgPath := "frontend/package.json"
+	content, err := os.ReadFile(pkgPath)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", pkgPath, err)
+	}
+
+	re := regexp.MustCompile(`("version"\s*:\s*")([^"]+)(")`)
+	newContent := re.ReplaceAllString(string(content), "${1}"+npmVersion+"${3}")
+
+	if err := os.WriteFile(pkgPath, []byte(newContent), 0o600); err != nil {
+		return fmt.Errorf("failed to write %s: %w", pkgPath, err)
+	}
+
+	return nil
+}
+
+// updatePublicCodeYml updates the softwareVersion and releaseDate in publiccode.yml.
+func updatePublicCodeYml(version string) error {
+	filePath := "publiccode.yml"
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return fmt.Errorf("failed to read %s: %w", filePath, err)
+	}
+
+	reVersion := regexp.MustCompile(`(softwareVersion:\s*')([^']+)(')`)
+	newContent := reVersion.ReplaceAllString(string(content), "${1}"+version+"${3}")
+
+	reDate := regexp.MustCompile(`(releaseDate:\s*')([^']+)(')`)
+	newContent = reDate.ReplaceAllString(newContent, "${1}"+time.Now().Format("2006-01-02")+"${3}")
+
+	if err := os.WriteFile(filePath, []byte(newContent), 0o600); err != nil {
+		return fmt.Errorf("failed to write %s: %w", filePath, err)
+	}
+
+	return nil
+}
+
+// prependChangelog prepends the new changelog entries to CHANGELOG.md
+func prependChangelog(newChangelog string) error {
+	changelogPath := "CHANGELOG.md"
+	existingContent, err := os.ReadFile(changelogPath)
+	if err != nil {
+		return fmt.Errorf("failed to read CHANGELOG.md: %w", err)
+	}
+
+	// Find where to insert the new changelog (after the header section)
+	content := string(existingContent)
+	headerEnd := strings.Index(content, "\n## ")
+	if headerEnd == -1 {
+		// No existing version sections, append at the end
+		headerEnd = len(content)
+	}
+
+	// Build new content: header + new changelog + existing versions
+	header := content[:headerEnd]
+	existingVersions := ""
+	if headerEnd < len(content) {
+		existingVersions = content[headerEnd:]
+	}
+
+	// Ensure there's proper spacing
+	newContent := strings.TrimRight(header, "\n") + "\n\n" +
+		strings.TrimSpace(newChangelog) + "\n" +
+		existingVersions
+
+	if err := os.WriteFile(changelogPath, []byte(newContent), 0o600); err != nil {
+		return fmt.Errorf("failed to write CHANGELOG.md: %w", err)
+	}
+
+	return nil
+}
+
+// prepareTagMessage removes markdown header formatting from the changelog for use as a tag message
+func prepareTagMessage(changelog string) string {
+	lines := strings.Split(changelog, "\n")
+	var result []string
+
+	for _, line := range lines {
+		// Remove ## and ### prefixes
+		switch {
+		case strings.HasPrefix(line, "### "):
+			result = append(result, strings.TrimPrefix(line, "### "))
+		case strings.HasPrefix(line, "## "):
+			result = append(result, strings.TrimPrefix(line, "## "))
+		default:
+			result = append(result, line)
+		}
+	}
+
+	return strings.Join(result, "\n")
+}
+
+type Plugins mg.Namespace
+
+// Build compiles a Go plugin at the provided path.
+func (Plugins) Build(ctx context.Context, pathToSourceFiles string) error {
+	mg.Deps(initVars)
+	if pathToSourceFiles == "" {
+		return fmt.Errorf("please provide a plugin path")
+	}
+
+	// Convert relative path to absolute path
+	if !strings.HasPrefix(pathToSourceFiles, "/") {
+		absPath, err := filepath.Abs(pathToSourceFiles)
+		if err != nil {
+			return fmt.Errorf("failed to resolve absolute path: %w", err)
+		}
+		pathToSourceFiles = absPath
+	}
+
+	out := filepath.Join("plugins", filepath.Base(pathToSourceFiles)+".so")
+	return runAndStreamOutput(ctx, "go", "build", "-buildmode=plugin", "-tags", Tags, "-o", out, pathToSourceFiles)
+}

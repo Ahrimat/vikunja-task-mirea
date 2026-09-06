@@ -1,0 +1,219 @@
+<template>
+	<div
+		:class="{ 'is-loading': loading}"
+		class="loader-container"
+	>
+		<XButton
+			:to="{name:'labels.create'}"
+			class="is-pulled-end"
+			icon="plus"
+		>
+			{{ $t('label.create.header') }}
+		</XButton>
+
+		<div class="content">
+			<h1>{{ $t('label.manage') }}</h1>
+			<p v-if="labels.length > 0">
+				{{ $t('label.description') }}
+			</p>
+			<p
+				v-else
+				class="has-text-centered has-text-grey is-italic"
+			>
+				{{ $t('label.newCTA') }}
+				<RouterLink :to="{name:'labels.create'}">
+					{{ $t('label.create.title') }}.
+				</RouterLink>
+			</p>
+		</div>
+
+		<div class="columns">
+			<div class="labels-list column">
+				<RouterLink
+					v-for="label in labels"
+					:key="label.id"
+					:to="{name: 'home', query: {labels: label.id}}"
+					:style="getLabelStyles(label)"
+					class="tag"
+				>
+					<span>{{ label.title }}</span>
+					<BaseButton
+						v-if="userInfo?.id === label.created_by?.id"
+						class="label-edit-button is-small"
+						:aria-label="$t('label.edit.header')"
+						@click.stop.prevent="editLabel(label)"
+					>
+						<Icon
+							icon="pen"
+							class="icon"
+						/>
+					</BaseButton>
+				</RouterLink>
+			</div>
+			<div
+				v-if="isLabelEdit"
+				class="column is-4"
+			>
+				<Card
+					:title="$t('label.edit.header')"
+					:show-close="true"
+					@close="() => isLabelEdit = false"
+				>
+					<form @submit.prevent="editLabelSubmit()">
+						<FormField
+							v-model="labelEditLabel.title"
+							:label="$t('label.attributes.title')"
+							:placeholder="$t('label.attributes.titlePlaceholder')"
+							type="text"
+						/>
+						<FormField :label="$t('label.attributes.description')">
+							<Editor
+								v-if="editorActive"
+								v-model="labelEditLabel.description"
+								:placeholder="$t('label.attributes.description')"
+							/>
+						</FormField>
+						<FormField :label="$t('label.attributes.color')">
+							<ColorPicker v-model="labelEditLabel.hex_color" />
+						</FormField>
+						<div class="field has-addons">
+							<div class="control is-expanded">
+								<XButton
+									:loading="loading"
+									class="is-fullwidth"
+									type="submit"
+								>
+									{{ $t('misc.save') }}
+								</XButton>
+							</div>
+							<div class="control">
+								<XButton
+									icon="trash-alt"
+									danger
+									:aria-label="$t('task.label.delete.header')"
+									@click="showDeleteDialoge(labelEditLabel)"
+								/>
+							</div>
+						</div>
+					</form>
+				</Card>
+			</div>
+
+			<Modal
+				:enabled="showDeleteModal"
+				@close="showDeleteModal = false"
+				@submit="deleteLabel(labelToDelete)"
+			>
+				<template #header>
+					<span>{{ $t('task.label.delete.header') }}</span>
+				</template>
+
+				<template #text>
+					<p>
+						{{ $t('task.label.delete.text1') }}<br>
+						{{ $t('task.label.delete.text2') }}
+					</p>
+				</template>
+			</Modal>
+		</div>
+	</div>
+</template>
+
+<script setup lang="ts">
+import {computed, nextTick, ref} from 'vue'
+import {useI18n} from 'vue-i18n'
+
+import BaseButton from '@/components/base/BaseButton.vue'
+import Editor from '@/components/input/AsyncEditor'
+import ColorPicker from '@/components/input/ColorPicker.vue'
+import FormField from '@/components/input/FormField.vue'
+
+import {useAuthStore} from '@/stores/auth'
+
+import { useTitle } from '@/composables/useTitle'
+import {useLabelStyles} from '@/composables/useLabelStyles'
+import {useLabels} from '@/composables/useLabels'
+import {
+	type UpdateLabelInput,
+	useDeleteLabelMutation,
+	useUpdateLabelMutation,
+} from '@/client/queries/labels'
+import type {Label} from '@/client/generated'
+
+const {t} = useI18n({useScope: 'global'})
+
+const labelEditLabel = ref<Required<UpdateLabelInput>>({id: 0, title: '', description: '', hex_color: ''})
+const isLabelEdit = ref(false)
+const editorActive = ref(false)
+const showDeleteModal = ref(false)
+const labelToDelete = ref<Label | undefined>(undefined)
+
+useTitle(() => t('label.title'))
+
+const authStore = useAuthStore()
+const userInfo = computed(() => authStore.info)
+
+const {labels, isPending} = useLabels()
+const updateLabelMutation = useUpdateLabelMutation()
+const deleteLabelMutation = useDeleteLabelMutation()
+const loading = computed(() => isPending.value || updateLabelMutation.isPending.value || deleteLabelMutation.isPending.value)
+const {getLabelStyles} = useLabelStyles()
+
+function deleteLabel(label?: Label) {
+	if (!label) {
+		return
+	}
+
+	showDeleteModal.value = false
+	isLabelEdit.value = false
+	return deleteLabelMutation.mutateAsync(label)
+}
+
+function editLabelSubmit() {
+	return updateLabelMutation.mutateAsync(labelEditLabel.value)
+}
+
+function editLabel(label: Label) {
+	if (typeof label.id === 'undefined' || label.created_by?.id !== userInfo.value?.id) {
+		return
+	}
+	labelEditLabel.value = {
+		id: label.id,
+		title: label.title ?? '',
+		description: label.description ?? '',
+		hex_color: label.hex_color ?? '',
+	}
+	isLabelEdit.value = true
+
+	// This makes the editor trigger its mounted function again which makes it forget every input
+	// it currently has in its textarea. This is a counter-hack to a hack inside of vue-easymde
+	// which made it impossible to detect change from the outside. Therefore the component would
+	// not update if new content from the outside was made available.
+	// See https://github.com/NikulinIlya/vue-easymde/issues/3
+	editorActive.value = false
+	nextTick(() => editorActive.value = true)
+}
+
+function showDeleteDialoge(label: Label) {
+	labelToDelete.value = label
+	showDeleteModal.value = true
+}
+</script>
+
+<style lang="scss" scoped>
+.label-edit-button {
+	border-radius: 100%;
+	background-color: rgba(0,0,0,0.2);
+	inline-size: 1rem;
+	block-size: 1rem;
+	display: flex;
+  	align-items: center;
+  	justify-content: center;
+	color: #ffffff; // always white
+	margin-inline-start: .25rem;
+
+	.icon {
+		block-size: .5rem;
+	}
+}
+</style>
